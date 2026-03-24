@@ -369,16 +369,20 @@ function useAppContextValue() {
         }
         const { url } = await res.json();
         if (!url) throw new Error("URL de checkout inválida");
-
-        const expiresAt = new Date();
-        expiresAt.setMonth(expiresAt.getMonth() + 1);
-        await saveProvider({ ...provider, plan, planExpiresAt: expiresAt.toISOString() });
-
         return url as string;
       } catch (err: any) {
         Alert.alert("Erro na assinatura", err.message ?? "Tente novamente.");
         return null;
       }
+    },
+    []
+  );
+
+  const activatePlan = useCallback(
+    async (plan: ProviderPlan) => {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      await saveProvider({ ...provider, plan, planExpiresAt: expiresAt.toISOString() });
     },
     [provider, saveProvider]
   );
@@ -430,6 +434,7 @@ function useAppContextValue() {
     sendMessage,
     markChatRead,
     subscribePlan,
+    activatePlan,
     registerProvider,
     withdrawEarnings,
     PLATFORM_FEE_RATE,

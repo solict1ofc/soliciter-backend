@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -117,7 +118,7 @@ type WithdrawMethod = "pix" | "bank";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { provider, subscribePlan, pendingEarnings, withdrawEarnings } = useApp();
+  const { provider, subscribePlan, activatePlan, pendingEarnings, withdrawEarnings } = useApp();
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
@@ -143,30 +144,28 @@ export default function ProfileScreen() {
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
 
   const handleSubscribe = async (plan: PlanConfig) => {
-    Alert.alert(
-      `Assinar ${plan.name}`,
-      `R$ ${plan.price},00/mês\n\nVocê será redirecionado para o checkout seguro do Stripe.`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Assinar",
-          style: "default",
-          onPress: async () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setSubscribing(true);
-            try {
-              const url = await subscribePlan(plan.key);
-              if (url) {
-                await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
-              }
-            } finally {
-              setSubscribing(false);
-              setSelectedPlan(null);
-            }
-          },
-        },
-      ]
-    );
+    if (subscribing) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSubscribing(true);
+    try {
+      const url = await subscribePlan(plan.key);
+      if (!url) return;
+
+      if (Platform.OS === "web") {
+        // Web: ativa o plano otimisticamente e redireciona na mesma aba
+        await activatePlan(plan.key);
+        window.location.href = url;
+      } else {
+        // Native: abre o browser externo e ativa o plano ao retornar
+        await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
+        await activatePlan(plan.key);
+      }
+    } catch (err: any) {
+      Alert.alert("Erro na assinatura", err.message ?? "Tente novamente.");
+    } finally {
+      setSubscribing(false);
+      setSelectedPlan(null);
+    }
   };
 
   const currentPlan = plans.find((p) => p.key === provider.plan);
@@ -638,9 +637,16 @@ export default function ProfileScreen() {
               </Pressable>
 
               <Text style={styles.modalTitle}>{selectedPlan.name}</Text>
-              <Text style={[styles.modalPrice, { color: selectedPlan.color }]}>
-                R$ {selectedPlan.price},00/mês
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
+                {selectedPlan.promoPrice && (
+                  <Text style={[styles.modalPrice, { color: C.textMuted, textDecorationLine: "line-through", fontSize: 16 }]}>
+                    R$ {selectedPlan.price}
+                  </Text>
+                )}
+                <Text style={[styles.modalPrice, { color: selectedPlan.color }]}>
+                  R$ {selectedPlan.promoPrice ?? selectedPlan.price},00/mês
+                </Text>
+              </View>
 
               <View style={styles.modalBenefits}>
                 {selectedPlan.benefits.map((benefit, i) => (
@@ -665,7 +671,9 @@ export default function ProfileScreen() {
                 disabled={subscribing}
               >
                 <Text style={styles.modalSubscribeText}>
-                  {subscribing ? "Processando..." : `Assinar por R$ ${selectedPlan.price},00/mês`}
+                  {subscribing
+                    ? "Abrindo checkout..."
+                    : `Assinar por R$ ${selectedPlan.promoPrice ?? selectedPlan.price},00/mês`}
                 </Text>
               </Pressable>
             </View>
