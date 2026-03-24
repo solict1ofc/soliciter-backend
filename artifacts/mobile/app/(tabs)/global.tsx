@@ -104,8 +104,20 @@ function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => 
         ]}
         onPress={onAccept}
       >
-        <MaterialCommunityIcons name="briefcase-check" size={18} color="#000" />
-        <Text style={styles.acceptButtonText}>Aceitar Serviço</Text>
+        <View style={styles.acceptButtonInner}>
+          <Ionicons
+            name={service.urgent ? "flash-circle" : "checkmark-circle-outline"}
+            size={22}
+            color="#000"
+          />
+          <View>
+            <Text style={styles.acceptButtonText}>Aceitar Serviço</Text>
+            <Text style={styles.acceptButtonSub}>
+              Receber R$ {service.finalValue.toFixed(2)}
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="arrow-forward-circle" size={24} color="rgba(0,0,0,0.4)" />
       </Pressable>
     </View>
   );
@@ -367,12 +379,17 @@ const styles = StyleSheet.create({
   },
   acceptButton: {
     backgroundColor: C.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    justifyContent: "space-between",
+  },
+  acceptButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   acceptButtonUrgent: {
     backgroundColor: C.danger,
@@ -382,9 +399,15 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   acceptButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: "#000",
+  },
+  acceptButtonSub: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: "rgba(0,0,0,0.6)",
+    marginTop: 2,
   },
   emptyState: {
     alignItems: "center",

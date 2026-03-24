@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -22,36 +22,59 @@ import type { Service, ServiceStatus } from "@/context/AppContext";
 
 const C = Colors.dark;
 
-const STATUS_CONFIG: Record<
-  ServiceStatus,
-  { label: string; color: string; icon: string }
-> = {
-  pending_payment: { label: "Aguardando Pagamento", color: C.warning, icon: "clock" },
-  available:       { label: "Disponível no Global",  color: C.primary, icon: "globe" },
-  accepted:        { label: "Aceito pelo Prestador", color: C.accent,  icon: "user-check" },
-  in_progress:     { label: "Em Andamento",          color: C.primary, icon: "tool" },
-  completed:       { label: "Finalizado",             color: C.success, icon: "check-circle" },
-  rated:           { label: "Concluído",              color: C.textSecondary, icon: "award" },
+// ─── Status config ───────────────────────────────────────────────────────────
+const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
+  pending_payment: { label: "Aguardando Pagamento", color: C.warning,       icon: "time-outline" },
+  available:       { label: "Disponível no Global",  color: C.primary,       icon: "globe-outline" },
+  accepted:        { label: "Aceito pelo Prestador", color: C.accent,        icon: "person-add-outline" },
+  in_progress:     { label: "Em Andamento",          color: "#FF9500",       icon: "construct-outline" },
+  completed:       { label: "Serviço Finalizado",    color: C.success,       icon: "checkmark-circle-outline" },
+  rated:           { label: "Concluído e Pago",      color: C.textSecondary, icon: "ribbon-outline" },
 };
 
-function StarRating({
-  value,
-  onChange,
-  size = 32,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  size?: number;
-}) {
+// statuses where money is "locked" awaiting release
+const ESCROW_STATUSES: ServiceStatus[] = ["available", "accepted", "in_progress", "completed"];
+
+// ─── Step progress bar ───────────────────────────────────────────────────────
+function StepBar({ step }: { step: "form" | "payment" | "success" }) {
+  const steps = ["Dados", "Pagamento", "Publicado"];
+  const active = step === "form" ? 0 : step === "payment" ? 1 : 2;
   return (
-    <View style={{ flexDirection: "row", gap: 8 }}>
+    <View style={styles.stepBar}>
+      {steps.map((label, i) => {
+        const done = i < active;
+        const current = i === active;
+        return (
+          <React.Fragment key={i}>
+            <View style={styles.stepItem}>
+              <View style={[styles.stepDot, done && styles.stepDotDone, current && styles.stepDotCurrent]}>
+                {done ? (
+                  <Ionicons name="checkmark" size={12} color="#000" />
+                ) : (
+                  <Text style={[styles.stepNum, current && { color: "#000" }]}>{i + 1}</Text>
+                )}
+              </View>
+              <Text style={[styles.stepLabel, (done || current) && { color: C.text }]}>{label}</Text>
+            </View>
+            {i < steps.length - 1 && (
+              <View style={[styles.stepLine, done && styles.stepLineDone]} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Star rating ─────────────────────────────────────────────────────────────
+function StarRating({ value, onChange, size = 36 }: { value: number; onChange: (v: number) => void; size?: number }) {
+  return (
+    <View style={{ flexDirection: "row", gap: 10 }}>
       {[1, 2, 3, 4, 5].map((star) => (
         <Pressable
           key={star}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            onChange(star);
-          }}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onChange(star); }}
+          hitSlop={10}
         >
           <Ionicons
             name={star <= value ? "star" : "star-outline"}
@@ -64,44 +87,24 @@ function StarRating({
   );
 }
 
+// ─── Input field ─────────────────────────────────────────────────────────────
 function InputField({
-  label,
-  placeholder,
-  value,
-  onChangeText,
-  icon,
-  multiline,
-  numberOfLines,
-  keyboardType,
+  label, placeholder, value, onChangeText, icon,
+  multiline, numberOfLines, keyboardType,
 }: {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  icon: string;
-  multiline?: boolean;
-  numberOfLines?: number;
-  keyboardType?: any;
+  label: string; placeholder: string; value: string;
+  onChangeText: (v: string) => void; icon: keyof typeof Feather.glyphMap;
+  multiline?: boolean; numberOfLines?: number; keyboardType?: any;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.inputWrapper}>
       <View style={styles.inputHeader}>
-        <Feather
-          name={icon as any}
-          size={13}
-          color={focused ? C.primary : C.textTertiary}
-        />
-        <Text style={[styles.inputLabel, focused && { color: C.primary }]}>
-          {label}
-        </Text>
+        <Feather name={icon} size={13} color={focused ? C.primary : C.textTertiary} />
+        <Text style={[styles.inputLabel, focused && { color: C.primary }]}>{label}</Text>
       </View>
       <TextInput
-        style={[
-          styles.input,
-          multiline && styles.inputMultiline,
-          focused && styles.inputFocused,
-        ]}
+        style={[styles.input, multiline && styles.inputMultiline, focused && styles.inputFocused]}
         placeholder={placeholder}
         placeholderTextColor={C.textMuted}
         value={value}
@@ -117,87 +120,136 @@ function InputField({
   );
 }
 
+// ─── Payment method selector ──────────────────────────────────────────────────
+type PayMethod = "pix" | "card" | "boleto";
+function PaymentMethodPicker({ selected, onChange }: { selected: PayMethod; onChange: (m: PayMethod) => void }) {
+  const methods: { id: PayMethod; label: string; icon: keyof typeof Ionicons.glyphMap; desc: string }[] = [
+    { id: "pix",    label: "PIX",    icon: "flash",        desc: "Aprovação imediata" },
+    { id: "card",   label: "Cartão", icon: "card-outline", desc: "Crédito ou débito"  },
+    { id: "boleto", label: "Boleto", icon: "barcode-outline", desc: "Vence em 1 dia"  },
+  ];
+  return (
+    <View style={styles.methodRow}>
+      {methods.map((m) => {
+        const active = selected === m.id;
+        return (
+          <Pressable
+            key={m.id}
+            style={[styles.methodCard, active && styles.methodCardActive]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onChange(m.id); }}
+          >
+            <Ionicons name={m.icon} size={22} color={active ? C.primary : C.textSecondary} />
+            <Text style={[styles.methodLabel, active && { color: C.primary }]}>{m.label}</Text>
+            <Text style={styles.methodDesc}>{m.desc}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Escrow indicator ─────────────────────────────────────────────────────────
+function EscrowBadge({ value }: { value: number }) {
+  return (
+    <View style={styles.escrowBadge}>
+      <Ionicons name="lock-closed" size={13} color={C.warning} />
+      <Text style={styles.escrowText}>
+        R$ {value.toFixed(2)} retido na plataforma — aguardando liberação
+      </Text>
+    </View>
+  );
+}
+
+// ─── Service card ─────────────────────────────────────────────────────────────
 function ServiceStatusCard({
-  service,
-  onPay,
-  onConfirmAndRate,
+  service, onPay, onConfirmAndRate,
 }: {
-  service: Service;
-  onPay: () => void;
-  onConfirmAndRate: () => void;
+  service: Service; onPay: () => void; onConfirmAndRate: () => void;
 }) {
   const cfg = STATUS_CONFIG[service.status];
-  const isUrgent = service.urgent;
+  const showEscrow = ESCROW_STATUSES.includes(service.status);
 
   return (
-    <View
-      style={[
-        styles.serviceCard,
-        isUrgent && service.status === "pending_payment" && styles.serviceCardUrgent,
-      ]}
-    >
+    <View style={[styles.serviceCard, service.urgent && styles.serviceCardUrgent]}>
+      {/* Header row */}
       <View style={styles.serviceCardRow}>
-        <View style={styles.serviceCardTitleArea}>
-          <Text style={styles.serviceCardTitle} numberOfLines={1}>
-            {service.title}
-          </Text>
-          <View style={styles.serviceCardMeta}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.serviceCardTitle} numberOfLines={1}>{service.title}</Text>
+          <View style={styles.metaRow}>
             <Feather name="map-pin" size={11} color={C.textTertiary} />
-            <Text style={styles.serviceCardMetaText}>
-              {service.neighborhood}, {service.city}
-            </Text>
+            <Text style={styles.metaText}>{service.neighborhood}, {service.city}</Text>
           </View>
         </View>
-        <View style={styles.serviceCardValueArea}>
-          <Text style={[styles.serviceCardValue, isUrgent && { color: C.danger }]}>
+        <View style={{ alignItems: "flex-end", gap: 4 }}>
+          <Text style={[styles.serviceCardValue, service.urgent && { color: C.danger }]}>
             R$ {service.finalValue.toFixed(2)}
           </Text>
-          {isUrgent && (
+          {service.urgent && (
             <View style={styles.urgentTag}>
               <Ionicons name="flash" size={10} color={C.danger} />
-              <Text style={styles.urgentTagText}>URGENTE</Text>
+              <Text style={styles.urgentTagText}>+R$10 URGENTE</Text>
             </View>
           )}
         </View>
       </View>
 
-      <View style={[styles.statusBadge, { borderColor: cfg.color }]}>
-        <Feather name={cfg.icon as any} size={12} color={cfg.color} />
-        <Text style={[styles.statusBadgeText, { color: cfg.color }]}>
-          {cfg.label}
-        </Text>
+      {/* Status badge */}
+      <View style={[styles.statusBadge, { backgroundColor: cfg.color + "20", borderColor: cfg.color }]}>
+        <Ionicons name={cfg.icon} size={13} color={cfg.color} />
+        <Text style={[styles.statusBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
       </View>
 
+      {/* Escrow indicator */}
+      {showEscrow && <EscrowBadge value={service.finalValue} />}
+
+      {/* Action: pay now */}
       {service.status === "pending_payment" && (
         <Pressable
-          style={({ pressed }) => [
-            styles.actionButton,
-            { backgroundColor: C.warning },
-            pressed && styles.actionButtonPressed,
-          ]}
+          style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.warning }, pressed && styles.pressed]}
           onPress={onPay}
         >
-          <Ionicons name="card" size={16} color="#000" />
-          <Text style={styles.actionButtonText}>Pagar Agora</Text>
+          <Ionicons name="card-outline" size={20} color="#000" />
+          <Text style={styles.actionBtnText}>Pagar Agora — R$ {service.finalValue.toFixed(2)}</Text>
         </Pressable>
       )}
 
+      {/* Status info rows */}
+      {service.status === "accepted" && (
+        <View style={styles.infoNote}>
+          <Ionicons name="person-circle-outline" size={16} color={C.accent} />
+          <Text style={styles.infoNoteText}>Prestador aceitou — aguardando ele iniciar</Text>
+        </View>
+      )}
+      {service.status === "in_progress" && (
+        <View style={styles.infoNote}>
+          <Ionicons name="construct-outline" size={16} color="#FF9500" />
+          <Text style={[styles.infoNoteText, { color: "#FF9500" }]}>Serviço em execução</Text>
+        </View>
+      )}
+
+      {/* Action: confirm + rate */}
       {service.status === "completed" && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.actionButton,
-            { backgroundColor: C.primary },
-            pressed && styles.actionButtonPressed,
-          ]}
-          onPress={onConfirmAndRate}
-        >
-          <Ionicons name="checkmark-done" size={16} color="#000" />
-          <Text style={styles.actionButtonText}>Confirmar Pagamento e Avaliar</Text>
-        </Pressable>
+        <>
+          <View style={styles.infoNote}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={C.success} />
+            <Text style={[styles.infoNoteText, { color: C.success }]}>
+              Prestador finalizou — confirme para liberar o pagamento
+            </Text>
+          </View>
+          <Pressable
+            style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.success }, pressed && styles.pressed]}
+            onPress={onConfirmAndRate}
+          >
+            <Ionicons name="checkmark-done-circle-outline" size={20} color="#000" />
+            <Text style={styles.actionBtnText}>Confirmar e Liberar Pagamento</Text>
+          </Pressable>
+        </>
       )}
 
+      {/* Rated */}
       {service.status === "rated" && service.clientRating !== undefined && (
         <View style={styles.ratedRow}>
+          <Text style={styles.ratedLabel}>Sua avaliação:</Text>
           {[1, 2, 3, 4, 5].map((s) => (
             <Ionicons
               key={s}
@@ -206,13 +258,266 @@ function ServiceStatusCard({
               color={s <= service.clientRating! ? C.gold : C.textMuted}
             />
           ))}
-          <Text style={styles.ratedText}>Sua avaliação</Text>
         </View>
       )}
     </View>
   );
 }
 
+// ─── Payment screen ───────────────────────────────────────────────────────────
+function PaymentScreen({
+  service, paying, onPay,
+}: {
+  service: Service | undefined; paying: boolean; onPay: (method: PayMethod) => void;
+}) {
+  const [method, setMethod] = useState<PayMethod>("pix");
+  if (!service) return null;
+
+  return (
+    <View style={styles.card}>
+      {/* Escrow notice */}
+      <View style={styles.escrowNotice}>
+        <Ionicons name="shield-checkmark" size={22} color={C.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.escrowNoticeTitle}>Pagamento Antecipado Seguro</Text>
+          <Text style={styles.escrowNoticeDesc}>
+            O valor fica retido na plataforma e só é liberado ao prestador após você confirmar o serviço.
+          </Text>
+        </View>
+      </View>
+
+      {/* Order summary */}
+      <View style={styles.orderSummary}>
+        <Text style={styles.orderSummaryTitle}>{service.title}</Text>
+        <View style={styles.orderRow}>
+          <Text style={styles.orderLabel}>Valor base</Text>
+          <Text style={styles.orderValue}>R$ {service.baseValue.toFixed(2)}</Text>
+        </View>
+        {service.urgent && (
+          <View style={styles.orderRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Ionicons name="flash" size={13} color={C.danger} />
+              <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa de urgência</Text>
+            </View>
+            <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
+          </View>
+        )}
+        <View style={[styles.orderRow, styles.orderTotal]}>
+          <Text style={styles.orderTotalLabel}>Total a pagar</Text>
+          <Text style={styles.orderTotalValue}>R$ {service.finalValue.toFixed(2)}</Text>
+        </View>
+      </View>
+
+      {/* Method selector */}
+      <View>
+        <Text style={styles.sectionLabel}>Forma de Pagamento</Text>
+        <PaymentMethodPicker selected={method} onChange={setMethod} />
+      </View>
+
+      {/* Lock + pay button */}
+      <Pressable
+        style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]}
+        onPress={() => onPay(method)}
+        disabled={paying}
+      >
+        {paying ? (
+          <>
+            <ActivityIndicator color="#000" size="small" />
+            <Text style={styles.payBtnText}>Processando pagamento...</Text>
+          </>
+        ) : (
+          <>
+            <Ionicons name="lock-closed" size={20} color="#000" />
+            <Text style={styles.payBtnText}>
+              Pagar e Reter R$ {service.finalValue.toFixed(2)}
+            </Text>
+          </>
+        )}
+      </Pressable>
+
+      <Text style={styles.payNote}>
+        🔒 Pagamento processado com segurança. Dinheiro liberado ao prestador somente após sua confirmação.
+      </Text>
+    </View>
+  );
+}
+
+// ─── Success screen ───────────────────────────────────────────────────────────
+function SuccessScreen({
+  neighborhood, city, urgent, onNew, onMyServices,
+}: {
+  neighborhood: string; city: string; urgent: boolean;
+  onNew: () => void; onMyServices: () => void;
+}) {
+  return (
+    <View style={styles.successCard}>
+      <View style={styles.successIcon}>
+        <Ionicons name="checkmark-circle" size={60} color={C.success} />
+      </View>
+      <Text style={styles.successTitle}>Publicado com Sucesso!</Text>
+      <Text style={styles.successSub}>
+        Sua solicitação está no Mercado Global. Prestadores da sua região já podem ver e aceitar.
+      </Text>
+      <View style={styles.successBadges}>
+        <View style={styles.badge}>
+          <Feather name="map-pin" size={11} color={C.primary} />
+          <Text style={styles.badgeText}>{city}</Text>
+        </View>
+        <View style={styles.badge}>
+          <Feather name="navigation" size={11} color={C.primary} />
+          <Text style={styles.badgeText}>{neighborhood}</Text>
+        </View>
+        {urgent && (
+          <View style={[styles.badge, { borderColor: C.danger }]}>
+            <Ionicons name="flash" size={11} color={C.danger} />
+            <Text style={[styles.badgeText, { color: C.danger }]}>Urgente</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.escrowBadge}>
+        <Ionicons name="lock-closed" size={14} color={C.warning} />
+        <Text style={styles.escrowText}>Pagamento retido — será liberado após confirmação</Text>
+      </View>
+      <Pressable
+        style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.7 }]}
+        onPress={onNew}
+      >
+        <Feather name="plus" size={16} color={C.primary} />
+        <Text style={styles.outlineBtnText}>Nova Solicitação</Text>
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.7 }]}
+        onPress={onMyServices}
+      >
+        <Text style={styles.ghostBtnText}>Ver Meus Serviços</Text>
+        <Feather name="arrow-right" size={14} color={C.textSecondary} />
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Rating modal ──────────────────────────────────────────────────────────────
+function RatingModal({
+  service, provider, PLATFORM_FEE_RATE, onClose,
+  onConfirm, confirmingPayment, paymentResult,
+}: {
+  service: Service;
+  provider: any;
+  PLATFORM_FEE_RATE: number;
+  onClose: () => void;
+  onConfirm: (rating: number) => void;
+  confirmingPayment: boolean;
+  paymentResult: { fee: number; providerEarning: number; platformFeeApplied: boolean } | null;
+}) {
+  const [rating, setRating] = useState(0);
+  const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
+  const providerEarning = service.finalValue - fee;
+  const ratingLabels = ["", "Muito ruim", "Ruim", "Regular", "Bom", "Excelente!"];
+
+  if (paymentResult) {
+    return (
+      <View style={styles.modalContent}>
+        <View style={styles.successIconSm}>
+          <Ionicons name="checkmark-circle" size={72} color={C.success} />
+        </View>
+        <Text style={styles.modalTitle}>Pagamento Liberado!</Text>
+        <Text style={styles.modalSub}>Obrigado pela avaliação. O prestador recebeu o pagamento.</Text>
+        <View style={styles.releaseBox}>
+          <Text style={styles.releaseLabel}>Valor liberado ao prestador</Text>
+          <Text style={styles.releaseValue}>R$ {paymentResult.providerEarning.toFixed(2)}</Text>
+          {paymentResult.platformFeeApplied ? (
+            <Text style={styles.releaseFee}>
+              Taxa da plataforma: R$ {paymentResult.fee.toFixed(2)} (10%)
+            </Text>
+          ) : (
+            <Text style={[styles.releaseFee, { color: C.success }]}>Sem taxa — plano ativo ✓</Text>
+          )}
+        </View>
+        <Pressable
+          style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]}
+          onPress={onClose}
+        >
+          <Ionicons name="checkmark-done" size={20} color="#000" />
+          <Text style={styles.payBtnText}>Fechar</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.modalContent}>
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle}>Confirmar e Liberar</Text>
+        {!confirmingPayment && (
+          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
+            <Feather name="x" size={20} color={C.textSecondary} />
+          </Pressable>
+        )}
+      </View>
+
+      <Text style={styles.modalSub} numberOfLines={1}>{service.title}</Text>
+
+      {/* Escrow release breakdown */}
+      <View style={styles.breakdownBox}>
+        <Text style={styles.breakdownTitle}>Detalhes do Pagamento</Text>
+        <View style={styles.orderRow}>
+          <Text style={styles.orderLabel}>Valor pago (retido)</Text>
+          <Text style={styles.orderValue}>R$ {service.finalValue.toFixed(2)}</Text>
+        </View>
+        {provider.plan === "free" ? (
+          <View style={styles.orderRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Ionicons name="information-circle-outline" size={14} color={C.danger} />
+              <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa plataforma (10%)</Text>
+            </View>
+            <Text style={[styles.orderValue, { color: C.danger }]}>-R$ {fee.toFixed(2)}</Text>
+          </View>
+        ) : (
+          <View style={styles.orderRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Ionicons name="shield-checkmark-outline" size={14} color={C.success} />
+              <Text style={[styles.orderLabel, { color: C.success }]}>Taxa plataforma</Text>
+            </View>
+            <Text style={[styles.orderValue, { color: C.success }]}>Isento (plano ativo)</Text>
+          </View>
+        )}
+        <View style={[styles.orderRow, styles.orderTotal]}>
+          <Text style={styles.orderTotalLabel}>Prestador recebe</Text>
+          <Text style={styles.orderTotalValue}>R$ {providerEarning.toFixed(2)}</Text>
+        </View>
+      </View>
+
+      {/* Star rating */}
+      <View style={styles.ratingSection}>
+        <Text style={styles.ratingSectionTitle}>Avalie o Prestador</Text>
+        <StarRating value={rating} onChange={setRating} size={42} />
+        <Text style={[styles.ratingHint, rating > 0 && { color: C.primary }]}>
+          {rating === 0 ? "Toque nas estrelas para avaliar" : ratingLabels[rating]}
+        </Text>
+      </View>
+
+      <Pressable
+        style={({ pressed }) => [styles.payBtn, rating === 0 && styles.payBtnDisabled, pressed && styles.pressed]}
+        onPress={() => onConfirm(rating)}
+        disabled={rating === 0 || confirmingPayment}
+      >
+        {confirmingPayment ? (
+          <>
+            <ActivityIndicator color="#000" size="small" />
+            <Text style={styles.payBtnText}>Liberando pagamento...</Text>
+          </>
+        ) : (
+          <>
+            <Ionicons name="lock-open-outline" size={20} color="#000" />
+            <Text style={styles.payBtnText}>Liberar Pagamento ao Prestador</Text>
+          </>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function SolicitacoesScreen() {
   const insets = useSafeAreaInsets();
   const { services, createService, confirmPayment, confirmAndRate, URGENT_FEE, PLATFORM_FEE_RATE, provider } = useApp();
@@ -220,31 +525,24 @@ export default function SolicitacoesScreen() {
   const [activeTab, setActiveTab] = useState<"nova" | "meus">("nova");
 
   // Form state
-  const [title, setTitle] = useState("");
+  const [title, setTitle]           = useState("");
   const [description, setDescription] = useState("");
-  const [value, setValue] = useState("");
-  const [city] = useState("Goiânia");
+  const [value, setValue]           = useState("");
+  const [city]                      = useState("Goiânia");
   const [neighborhood, setNeighborhood] = useState("");
-  const [urgent, setUrgent] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [paying, setPaying] = useState(false);
-  const [formStep, setFormStep] = useState<"form" | "payment" | "success">("form");
-  const [pendingServiceId, setPendingServiceId] = useState<string | null>(null);
+  const [urgent, setUrgent]         = useState(false);
+  const [creating, setCreating]     = useState(false);
+  const [paying, setPaying]         = useState(false);
+  const [formStep, setFormStep]     = useState<"form" | "payment" | "success">("form");
+  const [pendingId, setPendingId]   = useState<string | null>(null);
 
   // Rating modal
-  const [ratingModal, setRatingModal] = useState<{
-    service: Service;
-  } | null>(null);
-  const [rating, setRating] = useState(0);
+  const [ratingService, setRatingService]     = useState<Service | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState(false);
-  const [paymentResult, setPaymentResult] = useState<{
-    fee: number;
-    providerEarning: number;
-    platformFeeApplied: boolean;
-  } | null>(null);
+  const [paymentResult, setPaymentResult]     = useState<{ fee: number; providerEarning: number; platformFeeApplied: boolean } | null>(null);
 
   const numericValue = parseFloat(value.replace(",", ".")) || 0;
-  const finalValue = urgent ? numericValue + URGENT_FEE : numericValue;
+  const finalValue   = urgent ? numericValue + URGENT_FEE : numericValue;
 
   const myServices = [...services].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -254,242 +552,173 @@ export default function SolicitacoesScreen() {
   ).length;
 
   const handleCreate = async () => {
-    if (
-      !title.trim() ||
-      !description.trim() ||
-      !value.trim() ||
-      !neighborhood.trim()
-    ) {
-      Alert.alert("Campos obrigatórios", "Preencha todos os campos.");
+    if (!title.trim() || !description.trim() || !value.trim() || !neighborhood.trim()) {
+      Alert.alert("Campos obrigatórios", "Preencha todos os campos antes de continuar.");
       return;
     }
     if (numericValue <= 0) {
-      Alert.alert("Valor inválido", "Informe um valor válido.");
+      Alert.alert("Valor inválido", "Informe um valor maior que zero.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCreating(true);
     try {
       const svc = await createService({
-        title: title.trim(),
-        description: description.trim(),
-        value: numericValue,
-        city,
-        neighborhood: neighborhood.trim(),
-        urgent,
+        title: title.trim(), description: description.trim(),
+        value: numericValue, city, neighborhood: neighborhood.trim(), urgent,
       });
-      setPendingServiceId(svc.id);
+      setPendingId(svc.id);
       setFormStep("payment");
     } finally {
       setCreating(false);
     }
   };
 
-  const handlePay = async (serviceId: string) => {
+  const handlePay = async (_method: PayMethod) => {
+    if (!pendingId) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setPaying(true);
+    await new Promise((r) => setTimeout(r, 1800)); // simulate processing
+    await confirmPayment(pendingId);
+    setPaying(false);
+    setFormStep("success");
+  };
+
+  const handlePayFromCard = async (serviceId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPaying(true);
     await new Promise((r) => setTimeout(r, 1500));
     await confirmPayment(serviceId);
     setPaying(false);
-    if (serviceId === pendingServiceId) {
-      setFormStep("success");
-    }
   };
 
-  const handleOpenRating = (service: Service) => {
-    setRating(0);
-    setPaymentResult(null);
-    setRatingModal({ service });
-  };
-
-  const handleConfirmAndRate = async () => {
-    if (!ratingModal || rating === 0) return;
+  const handleConfirmAndRate = async (rating: number) => {
+    if (!ratingService || rating === 0) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setConfirmingPayment(true);
-    const result = await confirmAndRate(ratingModal.service.id, rating);
+    const result = await confirmAndRate(ratingService.id, rating);
     setConfirmingPayment(false);
-    if (result) {
-      setPaymentResult(result);
-    }
+    if (result) setPaymentResult(result);
   };
 
   const handleReset = () => {
-    setTitle("");
-    setDescription("");
-    setValue("");
-    setNeighborhood("");
-    setUrgent(false);
-    setPendingServiceId(null);
-    setFormStep("form");
+    setTitle(""); setDescription(""); setValue(""); setNeighborhood("");
+    setUrgent(false); setPendingId(null); setFormStep("form");
   };
 
+  const pendingService = pendingId ? services.find((s) => s.id === pendingId) : undefined;
+
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView
         style={[styles.container, { paddingTop: insets.top }]}
         contentContainerStyle={{ paddingBottom: 120 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Solicitações</Text>
-          <Text style={styles.headerSubtitle}>
-            Crie e acompanhe seus serviços
-          </Text>
+          <Text style={styles.headerSub}>Crie e acompanhe seus serviços</Text>
         </View>
 
         {/* Tab switcher */}
         <View style={styles.tabSwitcher}>
-          <Pressable
-            style={[styles.tabBtn, activeTab === "nova" && styles.tabBtnActive]}
-            onPress={() => setActiveTab("nova")}
-          >
-            <Feather
-              name="plus-circle"
-              size={14}
-              color={activeTab === "nova" ? "#000" : C.textSecondary}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === "nova" && styles.tabBtnTextActive,
-              ]}
-            >
-              Nova Solicitação
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tabBtn, activeTab === "meus" && styles.tabBtnActive]}
-            onPress={() => setActiveTab("meus")}
-          >
-            <Feather
-              name="list"
-              size={14}
-              color={activeTab === "meus" ? "#000" : C.textSecondary}
-            />
-            <Text
-              style={[
-                styles.tabBtnText,
-                activeTab === "meus" && styles.tabBtnTextActive,
-              ]}
-            >
-              Meus Serviços
-              {myServices.length > 0 && ` (${myServices.length})`}
-            </Text>
-            {pendingCount > 0 && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>{pendingCount}</Text>
-              </View>
-            )}
-          </Pressable>
+          {(["nova", "meus"] as const).map((tab) => {
+            const active = activeTab === tab;
+            return (
+              <Pressable
+                key={tab}
+                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Ionicons
+                  name={tab === "nova" ? "add-circle-outline" : "list-outline"}
+                  size={16}
+                  color={active ? "#000" : C.textSecondary}
+                />
+                <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
+                  {tab === "nova" ? "Nova Solicitação" : `Meus Serviços${myServices.length > 0 ? ` (${myServices.length})` : ""}`}
+                </Text>
+                {tab === "meus" && pendingCount > 0 && (
+                  <View style={styles.tabBadge}>
+                    <Text style={styles.tabBadgeText}>{pendingCount}</Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* ── NOVA SOLICITAÇÃO ── */}
+        {/* ── Nova Solicitação ── */}
         {activeTab === "nova" && (
           <>
+            {/* Step progress */}
+            <StepBar step={formStep} />
+
             {formStep === "form" && (
               <View style={styles.card}>
-                <InputField
-                  label="Título do Serviço"
-                  placeholder="Ex: Instalação de ar condicionado"
-                  value={title}
-                  onChangeText={setTitle}
-                  icon="file-text"
-                />
-                <InputField
-                  label="Descrição"
-                  placeholder="Descreva detalhes do serviço..."
-                  value={description}
-                  onChangeText={setDescription}
-                  icon="align-left"
-                  multiline
-                  numberOfLines={4}
-                />
-                <InputField
-                  label="Valor (R$)"
-                  placeholder="0,00"
-                  value={value}
-                  onChangeText={setValue}
-                  icon="dollar-sign"
-                  keyboardType="numeric"
-                />
+                <InputField label="Título do Serviço" placeholder="Ex: Instalação de ar condicionado" value={title} onChangeText={setTitle} icon="file-text" />
+                <InputField label="Descrição" placeholder="Descreva os detalhes do serviço..." value={description} onChangeText={setDescription} icon="align-left" multiline numberOfLines={4} />
+                <InputField label="Valor (R$)" placeholder="0,00" value={value} onChangeText={setValue} icon="dollar-sign" keyboardType="numeric" />
 
-                <View style={styles.row}>
-                  <View style={[styles.inputWrapper, { flex: 1, marginRight: 8 }]}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <View style={[styles.inputWrapper, { flex: 1 }]}>
                     <View style={styles.inputHeader}>
                       <Feather name="map-pin" size={13} color={C.textTertiary} />
                       <Text style={styles.inputLabel}>Cidade</Text>
                     </View>
-                    <View style={[styles.input, { opacity: 0.5 }]}>
-                      <Text style={{ color: C.textSecondary, fontFamily: "Inter_400Regular" }}>
-                        {city}
-                      </Text>
+                    <View style={[styles.input, { justifyContent: "center", opacity: 0.5 }]}>
+                      <Text style={{ color: C.textSecondary, fontFamily: "Inter_400Regular", fontSize: 15 }}>{city}</Text>
                     </View>
                   </View>
                   <View style={[styles.inputWrapper, { flex: 1 }]}>
-                    <InputField
-                      label="Bairro"
-                      placeholder="Seu bairro"
-                      value={neighborhood}
-                      onChangeText={setNeighborhood}
-                      icon="navigation"
-                    />
+                    <InputField label="Bairro" placeholder="Seu bairro" value={neighborhood} onChangeText={setNeighborhood} icon="navigation" />
                   </View>
                 </View>
 
-                {/* Urgência */}
+                {/* Urgent toggle */}
                 <Pressable
-                  style={styles.urgentToggle}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setUrgent(!urgent);
-                  }}
+                  style={[styles.urgentToggle, urgent && styles.urgentToggleActive]}
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setUrgent(!urgent); }}
                 >
-                  <View style={styles.urgentLeft}>
-                    <View style={[styles.urgentIcon, urgent && styles.urgentIconActive]}>
-                      <Ionicons name="flash" size={18} color={urgent ? "#fff" : C.textTertiary} />
-                    </View>
-                    <View>
-                      <Text style={styles.urgentTitle}>Serviço Urgente</Text>
-                      <Text style={styles.urgentSub}>
-                        +R$ {URGENT_FEE.toFixed(2)} ao valor
-                      </Text>
-                    </View>
+                  <View style={[styles.urgentIconWrap, urgent && styles.urgentIconWrapActive]}>
+                    <Ionicons name="flash" size={20} color={urgent ? "#fff" : C.textTertiary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.urgentTitle}>Serviço Urgente</Text>
+                    <Text style={styles.urgentSub}>+R$ 10,00 adicionado ao valor</Text>
                   </View>
                   <View style={[styles.checkbox, urgent && styles.checkboxActive]}>
-                    {urgent && <Feather name="check" size={14} color="#fff" />}
+                    {urgent && <Ionicons name="checkmark" size={14} color="#fff" />}
                   </View>
                 </Pressable>
 
+                {/* Price summary */}
                 {numericValue > 0 && (
-                  <View style={styles.summary}>
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Valor base</Text>
-                      <Text style={styles.summaryValue}>R$ {numericValue.toFixed(2)}</Text>
+                  <View style={styles.priceSummary}>
+                    <View style={styles.orderRow}>
+                      <Text style={styles.orderLabel}>Valor base</Text>
+                      <Text style={styles.orderValue}>R$ {numericValue.toFixed(2)}</Text>
                     </View>
                     {urgent && (
-                      <View style={styles.summaryRow}>
-                        <Text style={[styles.summaryLabel, { color: C.danger }]}>Taxa urgência</Text>
-                        <Text style={[styles.summaryValue, { color: C.danger }]}>
-                          +R$ {URGENT_FEE.toFixed(2)}
-                        </Text>
+                      <View style={styles.orderRow}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                          <Ionicons name="flash" size={13} color={C.danger} />
+                          <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa urgência</Text>
+                        </View>
+                        <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
                       </View>
                     )}
-                    <View style={[styles.summaryRow, styles.summaryTotal]}>
-                      <Text style={styles.summaryTotalLabel}>Total</Text>
-                      <Text style={styles.summaryTotalValue}>R$ {finalValue.toFixed(2)}</Text>
+                    <View style={[styles.orderRow, styles.orderTotal]}>
+                      <Text style={styles.orderTotalLabel}>Total</Text>
+                      <Text style={styles.orderTotalValue}>R$ {finalValue.toFixed(2)}</Text>
                     </View>
                   </View>
                 )}
 
                 <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    pressed && styles.primaryBtnPressed,
-                  ]}
+                  style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
                   onPress={handleCreate}
                   disabled={creating}
                 >
@@ -497,80 +726,37 @@ export default function SolicitacoesScreen() {
                     <ActivityIndicator color="#000" />
                   ) : (
                     <>
-                      <Feather name="send" size={17} color="#000" />
-                      <Text style={styles.primaryBtnText}>Criar Solicitação</Text>
+                      <Ionicons name="arrow-forward-circle-outline" size={20} color="#000" />
+                      <Text style={styles.primaryBtnText}>Continuar para Pagamento</Text>
                     </>
                   )}
                 </Pressable>
               </View>
             )}
 
-            {formStep === "payment" && pendingServiceId && (
-              <PaymentScreen
-                service={services.find((s) => s.id === pendingServiceId)!}
-                paying={paying}
-                onPay={() => handlePay(pendingServiceId)}
-              />
+            {formStep === "payment" && (
+              <PaymentScreen service={pendingService} paying={paying} onPay={handlePay} />
             )}
 
             {formStep === "success" && (
-              <View style={styles.successCard}>
-                <View style={styles.successIconWrap}>
-                  <Ionicons name="checkmark-circle" size={56} color={C.success} />
-                </View>
-                <Text style={styles.successTitle}>Publicado com sucesso!</Text>
-                <Text style={styles.successSub}>
-                  Seu serviço está disponível no Mercado Global. Prestadores da
-                  sua região já podem ver e aceitar.
-                </Text>
-                <View style={styles.successBadges}>
-                  <View style={styles.badge}>
-                    <Feather name="map-pin" size={11} color={C.primary} />
-                    <Text style={styles.badgeText}>{city}</Text>
-                  </View>
-                  <View style={styles.badge}>
-                    <Feather name="navigation" size={11} color={C.primary} />
-                    <Text style={styles.badgeText}>{neighborhood}</Text>
-                  </View>
-                  {urgent && (
-                    <View style={[styles.badge, { borderColor: C.danger }]}>
-                      <Ionicons name="flash" size={11} color={C.danger} />
-                      <Text style={[styles.badgeText, { color: C.danger }]}>Urgente</Text>
-                    </View>
-                  )}
-                </View>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.outlineBtn,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                  onPress={handleReset}
-                >
-                  <Feather name="plus" size={16} color={C.primary} />
-                  <Text style={styles.outlineBtnText}>Nova Solicitação</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.ghostBtn,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                  onPress={() => setActiveTab("meus")}
-                >
-                  <Text style={styles.ghostBtnText}>Ver Meus Serviços</Text>
-                  <Feather name="arrow-right" size={14} color={C.textSecondary} />
-                </Pressable>
-              </View>
+              <SuccessScreen
+                neighborhood={neighborhood}
+                city={city}
+                urgent={urgent}
+                onNew={handleReset}
+                onMyServices={() => setActiveTab("meus")}
+              />
             )}
           </>
         )}
 
-        {/* ── MEUS SERVIÇOS ── */}
+        {/* ── Meus Serviços ── */}
         {activeTab === "meus" && (
-          <View style={styles.myServicesSection}>
+          <View style={{ paddingHorizontal: 16, gap: 12 }}>
             {myServices.length === 0 ? (
               <View style={styles.emptyState}>
                 <View style={styles.emptyIcon}>
-                  <Feather name="inbox" size={36} color={C.textMuted} />
+                  <Ionicons name="file-tray-outline" size={40} color={C.textMuted} />
                 </View>
                 <Text style={styles.emptyTitle}>Nenhum serviço ainda</Text>
                 <Text style={styles.emptySub}>
@@ -582,8 +768,11 @@ export default function SolicitacoesScreen() {
                 <ServiceStatusCard
                   key={svc.id}
                   service={svc}
-                  onPay={() => handlePay(svc.id)}
-                  onConfirmAndRate={() => handleOpenRating(svc)}
+                  onPay={() => handlePayFromCard(svc.id)}
+                  onConfirmAndRate={() => {
+                    setPaymentResult(null);
+                    setRatingService(svc);
+                  }}
                 />
               ))
             )}
@@ -591,893 +780,282 @@ export default function SolicitacoesScreen() {
         )}
       </ScrollView>
 
-      {/* Rating Modal */}
+      {/* Rating / Payment release modal */}
       <Modal
-        visible={ratingModal !== null}
+        visible={ratingService !== null}
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!confirmingPayment && !paymentResult) setRatingModal(null);
+          if (!confirmingPayment) { setRatingService(null); setPaymentResult(null); }
         }}
       >
-        {ratingModal && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              {!paymentResult ? (
-                <>
-                  <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Confirmar Pagamento</Text>
-                    <Pressable
-                      onPress={() => setRatingModal(null)}
-                      style={styles.modalCloseBtn}
-                    >
-                      <Feather name="x" size={20} color={C.textSecondary} />
-                    </Pressable>
-                  </View>
-
-                  <Text style={styles.modalServiceName} numberOfLines={1}>
-                    {ratingModal.service.title}
-                  </Text>
-
-                  <View style={styles.feeBox}>
-                    <View style={styles.feeRow}>
-                      <Text style={styles.feeLabel}>Valor do serviço</Text>
-                      <Text style={styles.feeValue}>
-                        R$ {ratingModal.service.finalValue.toFixed(2)}
-                      </Text>
-                    </View>
-                    {provider.plan === "free" && (
-                      <View style={styles.feeRow}>
-                        <Text style={[styles.feeLabel, { color: C.danger }]}>
-                          Taxa da plataforma (10%)
-                        </Text>
-                        <Text style={[styles.feeValue, { color: C.danger }]}>
-                          -R$ {(ratingModal.service.finalValue * PLATFORM_FEE_RATE).toFixed(2)}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={[styles.feeRow, styles.feeTotalRow]}>
-                      <Text style={styles.feeTotalLabel}>Prestador recebe</Text>
-                      <Text style={styles.feeTotalValue}>
-                        R${" "}
-                        {(
-                          ratingModal.service.finalValue *
-                          (provider.plan === "free" ? 1 - PLATFORM_FEE_RATE : 1)
-                        ).toFixed(2)}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.ratingSection}>
-                    <Text style={styles.ratingSectionTitle}>Avalie o Prestador</Text>
-                    <Text style={styles.ratingSectionSub}>
-                      Como foi o serviço prestado?
-                    </Text>
-                    <StarRating value={rating} onChange={setRating} size={40} />
-                    <Text style={styles.ratingHint}>
-                      {rating === 0
-                        ? "Toque nas estrelas para avaliar"
-                        : rating === 1
-                        ? "Muito ruim"
-                        : rating === 2
-                        ? "Ruim"
-                        : rating === 3
-                        ? "Regular"
-                        : rating === 4
-                        ? "Bom"
-                        : "Excelente!"}
-                    </Text>
-                  </View>
-
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryBtn,
-                      rating === 0 && { opacity: 0.4 },
-                      pressed && styles.primaryBtnPressed,
-                    ]}
-                    onPress={handleConfirmAndRate}
-                    disabled={rating === 0 || confirmingPayment}
-                  >
-                    {confirmingPayment ? (
-                      <>
-                        <ActivityIndicator color="#000" />
-                        <Text style={styles.primaryBtnText}>Processando...</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="checkmark-done" size={17} color="#000" />
-                        <Text style={styles.primaryBtnText}>
-                          Confirmar Pagamento e Avaliar
-                        </Text>
-                      </>
-                    )}
-                  </Pressable>
-                </>
-              ) : (
-                <View style={styles.paymentSuccess}>
-                  <View style={styles.paymentSuccessIcon}>
-                    <Ionicons name="checkmark-circle" size={64} color={C.success} />
-                  </View>
-                  <Text style={styles.paymentSuccessTitle}>Tudo certo!</Text>
-                  <Text style={styles.paymentSuccessSub}>
-                    Pagamento confirmado e avaliação enviada.
-                  </Text>
-                  <View style={styles.earningsBox}>
-                    <Text style={styles.earningsLabel}>Prestador recebeu</Text>
-                    <Text style={styles.earningsValue}>
-                      R$ {paymentResult.providerEarning.toFixed(2)}
-                    </Text>
-                    {paymentResult.platformFeeApplied && (
-                      <Text style={styles.earningsFee}>
-                        (Taxa da plataforma: R$ {paymentResult.fee.toFixed(2)})
-                      </Text>
-                    )}
-                    {!paymentResult.platformFeeApplied && (
-                      <Text style={[styles.earningsFee, { color: C.success }]}>
-                        Sem taxa — plano ativo
-                      </Text>
-                    )}
-                  </View>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.primaryBtn,
-                      pressed && styles.primaryBtnPressed,
-                    ]}
-                    onPress={() => {
-                      setRatingModal(null);
-                      setPaymentResult(null);
-                    }}
-                  >
-                    <Text style={styles.primaryBtnText}>Fechar</Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
+        <View style={styles.modalOverlay}>
+          {ratingService && (
+            <RatingModal
+              service={ratingService}
+              provider={provider}
+              PLATFORM_FEE_RATE={PLATFORM_FEE_RATE}
+              onClose={() => { setRatingService(null); setPaymentResult(null); }}
+              onConfirm={handleConfirmAndRate}
+              confirmingPayment={confirmingPayment}
+              paymentResult={paymentResult}
+            />
+          )}
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );
 }
 
-function PaymentScreen({
-  service,
-  paying,
-  onPay,
-}: {
-  service: Service | undefined;
-  paying: boolean;
-  onPay: () => void;
-}) {
-  if (!service) return null;
-  return (
-    <View style={styles.card}>
-      <View style={styles.paymentIconWrap}>
-        <Ionicons name="card-outline" size={44} color={C.primary} />
-      </View>
-      <Text style={styles.paymentTitle}>Confirme o Pagamento</Text>
-      <Text style={styles.paymentSub}>
-        Após o pagamento, sua solicitação ficará disponível no Mercado Global
-      </Text>
-
-      <View style={styles.paymentDetail}>
-        <Row label="Serviço" value={service.title} />
-        <Row label="Cidade" value={service.city} />
-        <Row label="Bairro" value={service.neighborhood} />
-        {service.urgent && (
-          <Row label="Urgência" value="Sim" valueColor={C.danger} />
-        )}
-        <View style={[styles.summaryRow, styles.summaryTotal, { marginTop: 4 }]}>
-          <Text style={styles.summaryTotalLabel}>Total</Text>
-          <Text style={styles.summaryTotalValue}>
-            R$ {service.finalValue.toFixed(2)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.paymentMethods}>
-        {["Cartão de Crédito", "PIX", "Boleto"].map((m, i) => (
-          <View
-            key={m}
-            style={[
-              styles.paymentMethod,
-              i === 0 && styles.paymentMethodSelected,
-            ]}
-          >
-            <Text
-              style={[
-                styles.paymentMethodText,
-                i === 0 && { color: C.primary },
-              ]}
-            >
-              {m}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      <Pressable
-        style={({ pressed }) => [
-          styles.primaryBtn,
-          { backgroundColor: C.warning },
-          pressed && styles.primaryBtnPressed,
-        ]}
-        onPress={onPay}
-        disabled={paying}
-      >
-        {paying ? (
-          <>
-            <ActivityIndicator color="#000" />
-            <Text style={styles.primaryBtnText}>Processando...</Text>
-          </>
-        ) : (
-          <>
-            <Ionicons name="lock-closed" size={17} color="#000" />
-            <Text style={styles.primaryBtnText}>
-              Pagar Agora — R$ {service.finalValue.toFixed(2)}
-            </Text>
-          </>
-        )}
-      </Pressable>
-    </View>
-  );
-}
-
-function Row({
-  label,
-  value,
-  valueColor,
-}: {
-  label: string;
-  value: string;
-  valueColor?: string;
-}) {
-  return (
-    <View style={styles.summaryRow}>
-      <Text style={styles.summaryLabel}>{label}</Text>
-      <Text
-        style={[styles.summaryValue, valueColor && { color: valueColor }]}
-        numberOfLines={1}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: C.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
+  container: { flex: 1, backgroundColor: C.background },
+
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
+  headerTitle: { fontSize: 28, fontFamily: "Inter_700Bold", color: C.text, marginBottom: 4 },
+  headerSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
+
   tabSwitcher: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: C.surface,
-    borderRadius: 12,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 4,
+    flexDirection: "row", marginHorizontal: 16, marginBottom: 12,
+    backgroundColor: C.surface, borderRadius: 12, padding: 4,
+    borderWidth: 1, borderColor: C.border, gap: 4,
   },
   tabBtn: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: 9,
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 11, borderRadius: 9,
   },
-  tabBtnActive: {
-    backgroundColor: C.primary,
-  },
-  tabBtnText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: C.textSecondary,
-  },
-  tabBtnTextActive: {
-    color: "#000",
-  },
+  tabBtnActive: { backgroundColor: C.primary },
+  tabBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
+  tabBtnTextActive: { color: "#000" },
   tabBadge: {
-    backgroundColor: C.danger,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 18,
-    alignItems: "center",
+    backgroundColor: C.danger, borderRadius: 10,
+    paddingHorizontal: 6, paddingVertical: 2, minWidth: 18, alignItems: "center",
   },
-  tabBadgeText: {
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
+  tabBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  // Step bar
+  stepBar: {
+    flexDirection: "row", alignItems: "center",
+    marginHorizontal: 16, marginBottom: 14,
   },
+  stepItem: { alignItems: "center", gap: 5 },
+  stepDot: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: C.backgroundTertiary, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  stepDotDone: { backgroundColor: C.primary, borderColor: C.primary },
+  stepDotCurrent: { backgroundColor: C.primary, borderColor: C.primary },
+  stepNum: { fontSize: 12, fontFamily: "Inter_700Bold", color: C.textMuted },
+  stepLabel: { fontSize: 11, fontFamily: "Inter_500Medium", color: C.textMuted },
+  stepLine: { flex: 1, height: 2, backgroundColor: C.border, marginHorizontal: 6, marginBottom: 14 },
+  stepLineDone: { backgroundColor: C.primary },
+
   card: {
-    marginHorizontal: 16,
-    backgroundColor: C.surface,
-    borderRadius: 20,
-    padding: 20,
-    gap: 16,
-    borderWidth: 1,
-    borderColor: C.border,
+    marginHorizontal: 16, backgroundColor: C.surface,
+    borderRadius: 20, padding: 20, gap: 16,
+    borderWidth: 1, borderColor: C.border,
   },
-  row: {
-    flexDirection: "row",
-  },
-  inputWrapper: {
-    gap: 7,
-  },
-  inputHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  inputLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: C.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+
+  inputWrapper: { gap: 7 },
+  inputHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  inputLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: C.textTertiary, textTransform: "uppercase", letterSpacing: 0.8 },
   input: {
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: C.text,
-    borderWidth: 1,
-    borderColor: C.border,
+    backgroundColor: C.backgroundTertiary, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 14,
+    fontSize: 15, fontFamily: "Inter_400Regular", color: C.text,
+    borderWidth: 1, borderColor: C.border,
   },
-  inputMultiline: {
-    height: 96,
-    paddingTop: 13,
-  },
-  inputFocused: {
-    borderColor: C.primary,
-  },
+  inputMultiline: { height: 96, paddingTop: 14 },
+  inputFocused: { borderColor: C.primary },
+
   urgentToggle: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: C.backgroundTertiary, borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: C.border,
   },
-  urgentLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  urgentToggleActive: { borderColor: C.danger, backgroundColor: "rgba(255,59,92,0.08)" },
+  urgentIconWrap: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: C.border, alignItems: "center", justifyContent: "center",
   },
-  urgentIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  urgentIconActive: {
-    backgroundColor: C.danger,
-  },
-  urgentTitle: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: C.text,
-  },
-  urgentSub: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    marginTop: 2,
-  },
+  urgentIconWrapActive: { backgroundColor: C.danger },
+  urgentTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: C.text },
+  urgentSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 2 },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: C.border,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: C.border,
+    alignItems: "center", justifyContent: "center",
   },
-  checkboxActive: {
-    backgroundColor: C.primary,
-    borderColor: C.primary,
+  checkboxActive: { backgroundColor: C.primary, borderColor: C.primary },
+
+  priceSummary: {
+    backgroundColor: C.backgroundTertiary, borderRadius: 12,
+    padding: 14, gap: 10, borderWidth: 1, borderColor: C.border,
   },
-  summary: {
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: C.border,
+  orderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  orderLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  orderValue: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text },
+  orderTotal: { borderTopWidth: 1, borderTopColor: C.border, paddingTop: 10, marginTop: 2 },
+  orderTotalLabel: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.text },
+  orderTotalValue: { fontSize: 20, fontFamily: "Inter_700Bold", color: C.primary },
+  orderSummary: {
+    backgroundColor: C.backgroundTertiary, borderRadius: 14,
+    padding: 16, gap: 12, borderWidth: 1, borderColor: C.border,
   },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  summaryLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
-  summaryValue: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: C.text,
-    maxWidth: "55%",
-    textAlign: "right",
-  },
-  summaryTotal: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingTop: 10,
-    marginTop: 2,
-  },
-  summaryTotalLabel: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  summaryTotalValue: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: C.primary,
-  },
+  orderSummaryTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: C.text, marginBottom: 4 },
+
   primaryBtn: {
-    backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
+    backgroundColor: C.primary, borderRadius: 14, paddingVertical: 17,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  primaryBtnPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
+  primaryBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#000" },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+
+  // Payment screen
+  escrowNotice: {
+    flexDirection: "row", alignItems: "flex-start", gap: 12,
+    backgroundColor: C.primaryGlow, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.primary,
   },
-  primaryBtnText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#000",
+  escrowNoticeTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.primary, marginBottom: 4 },
+  escrowNoticeDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
+
+  sectionLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textTertiary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
+
+  methodRow: { flexDirection: "row", gap: 10 },
+  methodCard: {
+    flex: 1, borderRadius: 12, padding: 14,
+    backgroundColor: C.backgroundTertiary, borderWidth: 1, borderColor: C.border,
+    alignItems: "center", gap: 6,
   },
-  outlineBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 13,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.primary,
+  methodCardActive: { backgroundColor: C.primaryGlow, borderColor: C.primary },
+  methodLabel: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.textSecondary },
+  methodDesc: { fontSize: 10, fontFamily: "Inter_400Regular", color: C.textMuted, textAlign: "center" },
+
+  payBtn: {
+    backgroundColor: C.primary, borderRadius: 14, paddingVertical: 18,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  outlineBtnText: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-    color: C.primary,
+  payBtnDisabled: { opacity: 0.35 },
+  payBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#000" },
+  payNote: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textMuted, textAlign: "center", lineHeight: 18 },
+
+  // Escrow badge
+  escrowBadge: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: "rgba(255,184,0,0.12)", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "rgba(255,184,0,0.3)",
   },
-  ghostBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 10,
-  },
-  ghostBtnText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
+  escrowText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.warning, flex: 1 },
+
+  // Success
   successCard: {
-    marginHorizontal: 16,
-    backgroundColor: C.surface,
-    borderRadius: 20,
-    padding: 28,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 16,
+    marginHorizontal: 16, backgroundColor: C.surface,
+    borderRadius: 20, padding: 28, alignItems: "center",
+    borderWidth: 1, borderColor: C.border, gap: 16,
   },
-  successIconWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: C.successLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: C.success,
+  successIcon: {
+    width: 96, height: 96, borderRadius: 48,
+    backgroundColor: C.successLight, alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: C.success,
   },
-  successTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  successSub: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    textAlign: "center",
-    lineHeight: 21,
-  },
-  successBadges: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    justifyContent: "center",
-  },
+  successTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.text },
+  successSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary, textAlign: "center", lineHeight: 21 },
+  successBadges: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
   badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: C.primaryGlow,
-    borderRadius: 20,
-    paddingHorizontal: 11,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: C.primary,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: C.primaryGlow, borderRadius: 20,
+    paddingHorizontal: 11, paddingVertical: 5,
+    borderWidth: 1, borderColor: C.primary,
   },
-  badgeText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: C.primary,
+  badgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.primary },
+  outlineBtn: {
+    width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: C.primary,
   },
-  myServicesSection: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
+  outlineBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: C.primary },
+  ghostBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
+  ghostBtnText: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
+
+  // Service cards
   serviceCard: {
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: C.border,
-    gap: 12,
+    backgroundColor: C.surface, borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: C.border, gap: 12,
   },
-  serviceCardUrgent: {
-    borderColor: C.danger,
-  },
-  serviceCardRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  serviceCardTitleArea: {
-    flex: 1,
-    gap: 4,
-  },
-  serviceCardTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  serviceCardMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  serviceCardMetaText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: C.textTertiary,
-  },
-  serviceCardValueArea: {
-    alignItems: "flex-end",
-    gap: 4,
-  },
-  serviceCardValue: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: C.primary,
-  },
+  serviceCardUrgent: { borderColor: C.danger },
+  serviceCardRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
+  serviceCardTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.text, marginBottom: 4 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  metaText: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textTertiary },
+  serviceCardValue: { fontSize: 18, fontFamily: "Inter_700Bold", color: C.primary },
   urgentTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: C.dangerLight,
-    borderRadius: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: C.dangerLight, borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 3,
   },
-  urgentTagText: {
-    fontSize: 9,
-    fontFamily: "Inter_700Bold",
-    color: C.danger,
-    letterSpacing: 0.5,
-  },
+  urgentTagText: { fontSize: 9, fontFamily: "Inter_700Bold", color: C.danger, letterSpacing: 0.5 },
   statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    backgroundColor: "transparent",
+    flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start",
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1,
   },
-  statusBadgeText: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
+  statusBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  infoNote: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: C.backgroundTertiary, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: C.border,
   },
-  actionButton: {
-    borderRadius: 12,
-    paddingVertical: 13,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+  infoNoteText: { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary, flex: 1 },
+  actionBtn: {
+    borderRadius: 14, paddingVertical: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
   },
-  actionButtonPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: "#000",
-  },
-  ratedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  ratedText: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    marginLeft: 4,
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: 48,
-    gap: 14,
-  },
+  actionBtnText: { fontSize: 15, fontFamily: "Inter_700Bold", color: "#000" },
+  ratedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  ratedLabel: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, marginRight: 4 },
+
+  // Empty state
+  emptyState: { alignItems: "center", paddingVertical: 48, gap: 14 },
   emptyIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: C.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.border,
+    width: 72, height: 72, borderRadius: 20,
+    backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
   },
-  emptyTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  emptySub: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    textAlign: "center",
-    lineHeight: 21,
-    paddingHorizontal: 24,
-  },
-  paymentIconWrap: {
-    width: 76,
-    height: 76,
-    borderRadius: 22,
-    backgroundColor: C.primaryGlow,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-  },
-  paymentTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-    textAlign: "center",
-  },
-  paymentSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  paymentDetail: {
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  paymentMethods: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  paymentMethod: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 9,
-    backgroundColor: C.backgroundTertiary,
-    borderWidth: 1,
-    borderColor: C.border,
-    alignItems: "center",
-  },
-  paymentMethodSelected: {
-    backgroundColor: C.primaryGlow,
-    borderColor: C.primary,
-  },
-  paymentMethodText: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-    color: C.textSecondary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    justifyContent: "flex-end",
-  },
+  emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: C.text },
+  emptySub: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary, textAlign: "center", lineHeight: 21, paddingHorizontal: 24 },
+
+  // Modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
   modalContent: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 36,
-    gap: 18,
-    borderTopWidth: 1,
-    borderColor: C.border,
+    backgroundColor: C.surface, borderTopLeftRadius: 26, borderTopRightRadius: 26,
+    padding: 24, paddingBottom: 36, gap: 20,
+    borderTopWidth: 1, borderColor: C.border,
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  modalTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.text },
+  modalSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: C.backgroundTertiary, alignItems: "center", justifyContent: "center",
   },
-  modalTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
+  breakdownBox: {
+    backgroundColor: C.backgroundTertiary, borderRadius: 14,
+    padding: 16, gap: 12, borderWidth: 1, borderColor: C.border,
   },
-  modalCloseBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: C.backgroundTertiary,
-    alignItems: "center",
-    justifyContent: "center",
+  breakdownTitle: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textTertiary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 2 },
+  ratingSection: { alignItems: "center", gap: 12 },
+  ratingSectionTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: C.text },
+  ratingHint: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
+  successIconSm: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: C.successLight, alignItems: "center", justifyContent: "center",
+    alignSelf: "center", borderWidth: 2, borderColor: C.success,
   },
-  modalServiceName: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: C.textSecondary,
+  releaseBox: {
+    backgroundColor: C.successLight, borderRadius: 14,
+    padding: 20, alignItems: "center", gap: 6,
+    borderWidth: 1, borderColor: C.success, width: "100%",
   },
-  feeBox: {
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 14,
-    padding: 16,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
-  feeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  feeLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
-  feeValue: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: C.text,
-  },
-  feeTotalRow: {
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingTop: 10,
-    marginTop: 2,
-  },
-  feeTotalLabel: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  feeTotalValue: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: C.success,
-  },
-  ratingSection: {
-    alignItems: "center",
-    gap: 10,
-  },
-  ratingSectionTitle: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  ratingSectionSub: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
-  ratingHint: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: C.textSecondary,
-    marginTop: 4,
-  },
-  paymentSuccess: {
-    alignItems: "center",
-    gap: 16,
-    paddingVertical: 8,
-  },
-  paymentSuccessIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: C.successLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: C.success,
-  },
-  paymentSuccessTitle: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  paymentSuccessSub: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    textAlign: "center",
-  },
-  earningsBox: {
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: C.successLight,
-    borderRadius: 14,
-    padding: 20,
-    width: "100%",
-    borderWidth: 1,
-    borderColor: C.success,
-  },
-  earningsLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
-  earningsValue: {
-    fontSize: 32,
-    fontFamily: "Inter_700Bold",
-    color: C.success,
-  },
-  earningsFee: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: C.textTertiary,
-  },
+  releaseLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  releaseValue: { fontSize: 32, fontFamily: "Inter_700Bold", color: C.success },
+  releaseFee: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textMuted },
 });

@@ -198,72 +198,87 @@ function ServiceBlock({ service }: { service: Service }) {
         </View>
       </View>
 
+      {/* Custódia info */}
+      {(isAccepted || isInProgress) && (
+        <View style={styles.escrowInfo}>
+          <Ionicons name="lock-closed-outline" size={15} color={C.warning} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.escrowInfoTitle}>
+              R$ {providerEarning.toFixed(2)} em custódia
+            </Text>
+            <Text style={styles.escrowInfoDesc}>
+              Será liberado quando o cliente confirmar o serviço
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Chat button */}
       {(isAccepted || isInProgress) && (
         <Pressable
-          style={({ pressed }) => [
-            styles.chatBtn,
-            pressed && { opacity: 0.7 },
-          ]}
+          style={({ pressed }) => [styles.chatBtn, pressed && { opacity: 0.7 }]}
           onPress={() => router.push(`/chat/${service.id}`)}
         >
-          <Feather name="message-circle" size={16} color={C.primary} />
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color={C.primary} />
           <Text style={styles.chatBtnText}>Chat com o Cliente</Text>
         </Pressable>
       )}
 
-      {/* Action buttons */}
+      {/* ── INICIAR SERVIÇO ── */}
       {isAccepted && (
         <Pressable
-          style={({ pressed }) => [
-            styles.actionBtn,
-            { backgroundColor: C.accent },
-            pressed && styles.actionBtnPressed,
-          ]}
+          style={({ pressed }) => [styles.bigActionBtn, { backgroundColor: C.accent }, pressed && styles.actionBtnPressed]}
           onPress={handleStart}
           disabled={starting}
         >
           {starting ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color="#fff" size="large" />
           ) : (
-            <>
-              <Ionicons name="play-circle" size={20} color="#fff" />
-              <Text style={[styles.actionBtnText, { color: "#fff" }]}>
-                Iniciar Serviço
-              </Text>
-            </>
+            <View style={styles.bigActionBtnInner}>
+              <View style={styles.bigActionIconWrap}>
+                <Ionicons name="play-circle" size={36} color="#fff" />
+              </View>
+              <View>
+                <Text style={[styles.bigActionBtnTitle, { color: "#fff" }]}>Iniciar Serviço</Text>
+                <Text style={[styles.bigActionBtnSub, { color: "rgba(255,255,255,0.7)" }]}>
+                  Toque para confirmar início
+                </Text>
+              </View>
+            </View>
           )}
         </Pressable>
       )}
 
+      {/* ── FINALIZAR SERVIÇO ── */}
       {isInProgress && (
         <Pressable
-          style={({ pressed }) => [
-            styles.actionBtn,
-            { backgroundColor: C.success },
-            pressed && styles.actionBtnPressed,
-          ]}
+          style={({ pressed }) => [styles.bigActionBtn, { backgroundColor: C.success }, pressed && styles.actionBtnPressed]}
           onPress={handleFinalize}
           disabled={finalizing}
         >
           {finalizing ? (
-            <ActivityIndicator color="#000" />
+            <ActivityIndicator color="#000" size="large" />
           ) : (
-            <>
-              <Ionicons name="checkmark-circle" size={20} color="#000" />
-              <Text style={styles.actionBtnText}>Finalizar Serviço</Text>
-            </>
+            <View style={styles.bigActionBtnInner}>
+              <View style={[styles.bigActionIconWrap, { backgroundColor: "rgba(0,0,0,0.15)" }]}>
+                <Ionicons name="checkmark-done-circle" size={36} color="#000" />
+              </View>
+              <View>
+                <Text style={styles.bigActionBtnTitle}>Finalizar Serviço</Text>
+                <Text style={styles.bigActionBtnSub}>Serviço concluído? Toque aqui</Text>
+              </View>
+            </View>
           )}
         </Pressable>
       )}
 
       {isCompleted && (
         <View style={styles.awaitingBox}>
-          <Ionicons name="time-outline" size={18} color={C.warning} />
+          <Ionicons name="hourglass-outline" size={22} color={C.warning} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.awaitingTitle}>Aguardando confirmação</Text>
+            <Text style={styles.awaitingTitle}>Aguardando confirmação do cliente</Text>
             <Text style={styles.awaitingDesc}>
-              O cliente precisa confirmar o pagamento e avaliar o serviço para liberar seu pagamento.
+              O cliente precisa confirmar e liberar o pagamento de R$ {providerEarning.toFixed(2)}.
             </Text>
           </View>
         </View>
@@ -648,20 +663,72 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: C.success,
   },
+  escrowInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255,184,0,0.1)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,184,0,0.3)",
+  },
+  escrowInfoTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: C.warning,
+    marginBottom: 2,
+  },
+  escrowInfoDesc: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.warning,
+    opacity: 0.8,
+  },
   chatBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 13,
+    paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.primary,
   },
   chatBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: C.primary,
+  },
+  bigActionBtn: {
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+  },
+  bigActionBtnInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  bigActionIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bigActionBtnTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: "#000",
+    marginBottom: 3,
+  },
+  bigActionBtnSub: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "rgba(0,0,0,0.6)",
   },
   actionBtn: {
     borderRadius: 14,
