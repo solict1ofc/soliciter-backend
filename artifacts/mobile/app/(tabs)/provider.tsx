@@ -392,7 +392,7 @@ function ProviderRegisterGate() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, paddingBottom: 48, gap: 20 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Icon */}
@@ -1208,5 +1208,94 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: C.gold,
     marginLeft: 4,
+  },
+
+  // ── GATE (unregistered provider) ──────────────────────────────────────────
+  gateIconBox: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: C.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+    marginBottom: 4,
+  },
+  gateTitle: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+    color: C.text,
+    textAlign: "center",
+    letterSpacing: 0.3,
+  },
+  gateDesc: {
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
+    textAlign: "center",
+    lineHeight: 23,
+  },
+  gateBenefits: {
+    width: "100%",
+    backgroundColor: C.surface,
+    borderRadius: 18,
+    padding: 20,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  gateBenefitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  gateBenefitIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: C.primaryGlow,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.primary,
+  },
+  gateBenefitText: {
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+    color: C.text,
+    flex: 1,
+  },
+  gateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: C.primary,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    width: "100%",
+    shadowColor: C.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  gateBtnText: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    color: "#000",
+    letterSpacing: 0.3,
+  },
+  gateFootnote: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });
