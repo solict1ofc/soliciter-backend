@@ -242,7 +242,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // ─── 6. Cliente confirma + avalia → rated ─────────────────────────────────
+  // ─── 6. Cliente efetua pagamento (avaliação opcional) → rated ──────────────
   // Só aqui o valor sai da custódia e vai para saldo DISPONÍVEL do prestador
   const confirmAndRate = useCallback(
     async (serviceId: string, rating: number) => {
@@ -252,16 +252,20 @@ function useAppContextValue() {
       const providerEarning = calcProviderEarning(service, provider.plan);
       const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
 
-      const totalRatings = provider.totalRatings + 1;
-      const newRating =
-        (provider.rating * provider.totalRatings + rating) / totalRatings;
+      // Só atualiza a avaliação e média se o cliente de fato avaliou
+      const hasRating = rating > 0;
+      const totalRatings = hasRating ? provider.totalRatings + 1 : provider.totalRatings;
+      const newRating = hasRating
+        ? (provider.rating * provider.totalRatings + rating) / totalRatings
+        : provider.rating;
 
       const updated = services.map((s) =>
         s.id === serviceId
           ? {
               ...s,
               status: "rated" as ServiceStatus,
-              clientRating: rating,
+              // só persiste clientRating se foi de fato dado
+              ...(hasRating ? { clientRating: rating } : {}),
               ratedAt: new Date().toISOString(),
             }
           : s

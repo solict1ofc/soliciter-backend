@@ -8,8 +8,8 @@ const STATUS_NOTIFS: Partial<Record<ServiceStatus, NotifConfig>> = {
   available:   { title: "✅ Serviço Publicado!", body: "Sua solicitação está no Mercado Global.", type: "success" },
   accepted:    { title: "🤝 Prestador Aceitou!",  body: "Um prestador aceitou. O chat foi liberado!", type: "success" },
   in_progress: { title: "🔨 Serviço Iniciado",    body: "O prestador começou a executar.", type: "info" },
-  completed:   { title: "🎉 Serviço Finalizado!", body: "Confirme o pagamento na aba Solicitar.", type: "warning" },
-  rated:       { title: "💰 Pagamento Liberado",  body: "O prestador recebeu o pagamento.", type: "success" },
+  completed:   { title: "💳 Serviço Concluído!", body: "Prestador finalizou. Efetue o pagamento na aba Solicitar!", type: "warning" },
+  rated:       { title: "✅ Pagamento Confirmado!", body: "O valor foi liberado direto para o prestador.", type: "success" },
 };
 
 export function useServiceNotifications(services: Service[]) {

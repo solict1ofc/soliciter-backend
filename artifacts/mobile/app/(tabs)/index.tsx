@@ -31,7 +31,7 @@ const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon:
   available:       { label: "Disponível no Global",  color: C.primary,       icon: "globe-outline" },
   accepted:        { label: "Aceito pelo Prestador", color: C.accent,        icon: "person-add-outline" },
   in_progress:     { label: "Em Andamento",          color: "#FF9500",       icon: "construct-outline" },
-  completed:       { label: "Serviço Finalizado",    color: C.success,       icon: "checkmark-circle-outline" },
+  completed:       { label: "Aguardando Pagamento",  color: C.warning,       icon: "cash-outline" },
   rated:           { label: "Concluído e Pago",      color: C.textSecondary, icon: "ribbon-outline" },
 };
 
@@ -230,21 +230,21 @@ function ServiceStatusCard({
         </View>
       )}
 
-      {/* Action: confirm + rate */}
+      {/* Action: pay — triggered when provider finalizes */}
       {service.status === "completed" && (
         <>
-          <View style={styles.infoNote}>
-            <Ionicons name="checkmark-circle-outline" size={16} color={C.success} />
-            <Text style={[styles.infoNoteText, { color: C.success }]}>
-              Prestador finalizou — confirme para liberar o pagamento
+          <View style={[styles.infoNote, { backgroundColor: "rgba(255,184,0,0.12)", borderColor: C.warning, borderWidth: 1, borderRadius: 10 }]}>
+            <Ionicons name="cash-outline" size={17} color={C.warning} />
+            <Text style={[styles.infoNoteText, { color: C.warning, fontFamily: "Inter_600SemiBold" }]}>
+              Prestador finalizou o serviço — efetue o pagamento!
             </Text>
           </View>
           <Pressable
-            style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.success }, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.warning }, pressed && styles.pressed]}
             onPress={onConfirmAndRate}
           >
-            <Ionicons name="checkmark-done-circle-outline" size={20} color="#000" />
-            <Text style={styles.actionBtnText}>Confirmar e Liberar Pagamento</Text>
+            <Ionicons name="cash-outline" size={20} color="#000" />
+            <Text style={styles.actionBtnText}>Efetuar Pagamento ao Prestador</Text>
           </Pressable>
         </>
       )}
@@ -442,14 +442,14 @@ function RatingModal({
         <View style={styles.successIconSm}>
           <Ionicons name="checkmark-circle" size={72} color={C.success} />
         </View>
-        <Text style={styles.modalTitle}>Pagamento Liberado!</Text>
-        <Text style={styles.modalSub}>Obrigado pela avaliação. O prestador recebeu o pagamento.</Text>
+        <Text style={styles.modalTitle}>Pagamento Efetuado!</Text>
+        <Text style={styles.modalSub}>O valor foi liberado direto para a conta do prestador.</Text>
         <View style={styles.releaseBox}>
-          <Text style={styles.releaseLabel}>Valor liberado ao prestador</Text>
+          <Text style={styles.releaseLabel}>Valor creditado ao prestador</Text>
           <Text style={styles.releaseValue}>R$ {paymentResult.providerEarning.toFixed(2)}</Text>
           {paymentResult.platformFeeApplied ? (
             <Text style={styles.releaseFee}>
-              Taxa da plataforma: R$ {paymentResult.fee.toFixed(2)} (10%)
+              Taxa da plataforma descontada: R$ {paymentResult.fee.toFixed(2)} (10%)
             </Text>
           ) : (
             <Text style={[styles.releaseFee, { color: C.success }]}>Sem taxa — plano ativo ✓</Text>
@@ -469,7 +469,7 @@ function RatingModal({
   return (
     <View style={styles.modalContent}>
       <View style={styles.modalHeader}>
-        <Text style={styles.modalTitle}>Confirmar e Liberar</Text>
+        <Text style={styles.modalTitle}>Efetuar Pagamento</Text>
         {!confirmingPayment && (
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
             <Ionicons name="close-outline" size={20} color={C.textSecondary} />
@@ -481,9 +481,9 @@ function RatingModal({
 
       {/* Escrow release breakdown */}
       <View style={styles.breakdownBox}>
-        <Text style={styles.breakdownTitle}>Detalhes do Pagamento</Text>
+        <Text style={styles.breakdownTitle}>Resumo do Pagamento</Text>
         <View style={styles.orderRow}>
-          <Text style={styles.orderLabel}>Valor pago (retido)</Text>
+          <Text style={styles.orderLabel}>Valor retido na plataforma</Text>
           <Text style={styles.orderValue}>R$ {service.finalValue.toFixed(2)}</Text>
         </View>
         {provider.plan === "free" ? (
@@ -504,37 +504,46 @@ function RatingModal({
           </View>
         )}
         <View style={[styles.orderRow, styles.orderTotal]}>
-          <Text style={styles.orderTotalLabel}>Prestador recebe</Text>
+          <Text style={styles.orderTotalLabel}>Prestador recebe agora</Text>
           <Text style={styles.orderTotalValue}>R$ {providerEarning.toFixed(2)}</Text>
         </View>
       </View>
 
-      {/* Star rating */}
+      {/* Star rating — optional */}
       <View style={styles.ratingSection}>
-        <Text style={styles.ratingSectionTitle}>Avalie o Prestador</Text>
-        <StarRating value={rating} onChange={setRating} size={42} />
+        <Text style={styles.ratingSectionTitle}>
+          Avalie o Prestador{" "}
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: C.textMuted }}>(opcional)</Text>
+        </Text>
+        <StarRating value={rating} onChange={setRating} size={40} />
         <Text style={[styles.ratingHint, rating > 0 && { color: C.primary }]}>
-          {rating === 0 ? "Toque nas estrelas para avaliar" : ratingLabels[rating]}
+          {rating === 0 ? "Toque nas estrelas para avaliar (pode pular)" : ratingLabels[rating]}
         </Text>
       </View>
 
       <Pressable
-        style={({ pressed }) => [styles.payBtn, rating === 0 && styles.payBtnDisabled, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]}
         onPress={() => onConfirm(rating)}
-        disabled={rating === 0 || confirmingPayment}
+        disabled={confirmingPayment}
       >
         {confirmingPayment ? (
           <>
             <ActivityIndicator color="#000" size="small" />
-            <Text style={styles.payBtnText}>Liberando pagamento...</Text>
+            <Text style={styles.payBtnText}>Efetuando pagamento...</Text>
           </>
         ) : (
           <>
-            <Ionicons name="lock-open-outline" size={20} color="#000" />
-            <Text style={styles.payBtnText}>Liberar Pagamento ao Prestador</Text>
+            <Ionicons name="cash-outline" size={20} color="#000" />
+            <Text style={styles.payBtnText}>
+              Pagar R$ {providerEarning.toFixed(2)} ao Prestador
+            </Text>
           </>
         )}
       </Pressable>
+
+      <Text style={[styles.payNote, { marginTop: 8, textAlign: "center" }]}>
+        O valor é creditado direto na conta do prestador após sua confirmação.
+      </Text>
     </View>
   );
 }
