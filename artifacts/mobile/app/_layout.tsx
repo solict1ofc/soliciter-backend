@@ -82,7 +82,7 @@ export default function RootLayout() {
 
         {/* Nome do app */}
         <Text style={splash.brand}>SOLICITE</Text>
-        <Text style={splash.tagline}>Serviços em Goiânia</Text>
+        <Text style={splash.tagline}>Serviços sob demanda</Text>
 
         {/* Barra de carregamento */}
         <View style={splash.loadingBar}>
