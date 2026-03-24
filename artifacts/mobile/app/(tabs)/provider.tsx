@@ -1,15 +1,16 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -310,111 +311,229 @@ function ServiceBlock({ service }: { service: Service }) {
   );
 }
 
-export default function ProviderScreen() {
-  const insets = useSafeAreaInsets();
-  const { activeService, provider } = useApp();
+// ─── History card ─────────────────────────────────────────────────────────────
+function HistoryCard({ service }: { service: Service }) {
+  const { provider, PLATFORM_FEE_RATE } = useApp();
+  const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
+  const earned = service.finalValue - fee;
+  const date = new Date(service.ratedAt ?? service.completedAt ?? service.createdAt);
+  const dateStr = date.toLocaleDateString("pt-BR", {
+    day: "2-digit", month: "short", year: "numeric",
+  });
+  const isRated = service.status === "rated";
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 120 }}
-        contentInsetAdjustmentBehavior="automatic"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Área do Prestador</Text>
-          <Text style={styles.headerSubtitle}>
-            {activeService
-              ? "Você tem um serviço ativo"
-              : "Nenhum serviço ativo no momento"}
+    <View style={styles.historyCard}>
+      <View style={styles.historyCardHeader}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={styles.historyCardTitle} numberOfLines={1}>{service.title}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Feather name="map-pin" size={11} color={C.textTertiary} />
+            <Text style={styles.historyCardMeta}>{service.neighborhood}, {service.city}</Text>
+          </View>
+        </View>
+        <View style={styles.historyEarned}>
+          <Text style={styles.historyEarnedValue}>+R$ {earned.toFixed(2)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.historyCardRow}>
+        <View style={[
+          styles.historyStatusPill,
+          isRated ? styles.historyStatusRated : styles.historyStatusCompleted,
+        ]}>
+          <Ionicons
+            name={isRated ? "checkmark-circle" : "hourglass-outline"}
+            size={12}
+            color={isRated ? C.success : C.warning}
+          />
+          <Text style={[styles.historyStatusText, { color: isRated ? C.success : C.warning }]}>
+            {isRated ? "Pago" : "Aguardando"}
           </Text>
         </View>
 
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{provider.completedJobs}</Text>
-            <Text style={styles.statLabel}>Concluídos</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statValue, { color: C.success, fontSize: 15 }]}>
-              R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
-            </Text>
-            <Text style={styles.statLabel}>Total ganho</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{provider.rating} ⭐</Text>
-            <Text style={styles.statLabel}>Avaliação</Text>
-          </View>
-        </View>
+        <Text style={styles.historyDate}>{dateStr}</Text>
+      </View>
 
-        {/* Active service block */}
-        {!activeService ? (
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIcon}>
-              <MaterialCommunityIcons
-                name="briefcase-clock-outline"
-                size={40}
-                color={C.textMuted}
-              />
-            </View>
-            <Text style={styles.emptyTitle}>Sem serviço ativo</Text>
-            <Text style={styles.emptyDesc}>
-              Vá para o Mercado Global e aceite um serviço disponível para começar a trabalhar
-            </Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.goGlobalBtn,
-                pressed && { opacity: 0.7 },
-              ]}
-              onPress={() => router.push("/(tabs)/global")}
-            >
-              <Feather name="globe" size={15} color={C.primary} />
-              <Text style={styles.goGlobalText}>Ver Mercado Global</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <ServiceBlock service={activeService} />
-        )}
-
-        {/* Flow guide */}
-        <View style={styles.flowGuide}>
-          <Text style={styles.flowGuideTitle}>Fluxo do Serviço</Text>
-          {[
-            { icon: "globe", label: "Serviço disponível no Global", done: true },
-            { icon: "user-check", label: "Você aceita o serviço", done: !!activeService },
-            { icon: "play", label: "Inicia a execução", done: activeService?.status === "in_progress" || activeService?.status === "completed" || activeService?.status === "rated" },
-            { icon: "check-circle", label: "Finaliza o serviço", done: activeService?.status === "completed" || activeService?.status === "rated" },
-            { icon: "dollar-sign", label: "Cliente confirma e paga", done: activeService?.status === "rated" },
-          ].map((step, i) => (
-            <View key={i} style={styles.flowStep}>
-              <View
-                style={[
-                  styles.flowStepIcon,
-                  step.done && styles.flowStepIconDone,
-                ]}
-              >
-                <Feather
-                  name={step.icon as any}
-                  size={14}
-                  color={step.done ? "#000" : C.textMuted}
-                />
-              </View>
-              <Text
-                style={[
-                  styles.flowStepText,
-                  step.done && { color: C.text },
-                ]}
-              >
-                {step.label}
-              </Text>
-              {step.done && (
-                <Ionicons name="checkmark-circle" size={16} color={C.success} />
-              )}
-            </View>
+      {service.clientRating !== undefined && (
+        <View style={styles.historyRatingRow}>
+          <Text style={styles.historyRatingLabel}>Avaliação:</Text>
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Ionicons
+              key={s}
+              name={s <= service.clientRating! ? "star" : "star-outline"}
+              size={14}
+              color={s <= service.clientRating! ? C.gold : C.textMuted}
+            />
           ))}
+          <Text style={styles.historyRatingNum}>{service.clientRating}/5</Text>
         </View>
-      </ScrollView>
+      )}
+    </View>
+  );
+}
+
+export default function ProviderScreen() {
+  const insets = useSafeAreaInsets();
+  const { activeService, provider, services } = useApp();
+  const [tab, setTab] = useState<"ativo" | "historico">("ativo");
+
+  const historyServices = useMemo(() => {
+    return [...services]
+      .filter((s) =>
+        (s.status === "rated" || s.status === "completed") &&
+        (s.providerId === provider.id || s.id === activeService?.id)
+      )
+      .sort((a, b) =>
+        new Date(b.ratedAt ?? b.completedAt ?? b.createdAt).getTime() -
+        new Date(a.ratedAt ?? a.completedAt ?? a.createdAt).getTime()
+      );
+  }, [services, provider.id, activeService?.id]);
+
+  const totalEarnedSession = useMemo(() => {
+    return historyServices
+      .filter((s) => s.status === "rated")
+      .reduce((sum, s) => {
+        const fee = provider.plan === "free" ? s.finalValue * 0.1 : 0;
+        return sum + (s.finalValue - fee);
+      }, 0);
+  }, [historyServices, provider.plan]);
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* ── Header ── */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Área do Prestador</Text>
+        <Text style={styles.headerSubtitle}>
+          {activeService ? "Você tem um serviço ativo" : "Nenhum serviço ativo"}
+        </Text>
+      </View>
+
+      {/* ── Stats ── */}
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{provider.completedJobs}</Text>
+          <Text style={styles.statLabel}>Concluídos</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statValue, { color: C.success, fontSize: 15 }]}>
+            R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+          </Text>
+          <Text style={styles.statLabel}>Total ganho</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{provider.rating} ⭐</Text>
+          <Text style={styles.statLabel}>Avaliação</Text>
+        </View>
+      </View>
+
+      {/* ── Tab switcher ── */}
+      <View style={styles.tabRow}>
+        {([
+          { key: "ativo" as const,    label: "Serviço Ativo" },
+          { key: "historico" as const, label: `Histórico (${historyServices.length})` },
+        ]).map((t) => (
+          <Pressable
+            key={t.key}
+            style={[styles.tabBtn, tab === t.key && styles.tabBtnActive]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab(t.key); }}
+          >
+            <Text style={[styles.tabBtnText, tab === t.key && styles.tabBtnTextActive]}>
+              {t.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* ── Tab: Ativo ── */}
+      {tab === "ativo" && (
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 120, gap: 16 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {!activeService ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <MaterialCommunityIcons name="briefcase-clock-outline" size={40} color={C.textMuted} />
+              </View>
+              <Text style={styles.emptyTitle}>Sem serviço ativo</Text>
+              <Text style={styles.emptyDesc}>
+                Vá para o Mercado Global e aceite um serviço disponível para começar a trabalhar
+              </Text>
+              <Pressable
+                style={({ pressed }) => [styles.goGlobalBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => router.push("/(tabs)/global")}
+              >
+                <Feather name="globe" size={15} color={C.primary} />
+                <Text style={styles.goGlobalText}>Ver Mercado Global</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <ServiceBlock service={activeService} />
+          )}
+
+          {/* Flow guide */}
+          <View style={styles.flowGuide}>
+            <Text style={styles.flowGuideTitle}>Fluxo do Serviço</Text>
+            {[
+              { icon: "globe",       label: "Serviço disponível no Global",  done: true },
+              { icon: "user-check",  label: "Você aceita o serviço",         done: !!activeService },
+              { icon: "play",        label: "Inicia a execução",              done: activeService?.status === "in_progress" || activeService?.status === "completed" || activeService?.status === "rated" },
+              { icon: "check-circle", label: "Finaliza o serviço",           done: activeService?.status === "completed" || activeService?.status === "rated" },
+              { icon: "dollar-sign", label: "Cliente confirma e libera",      done: activeService?.status === "rated" },
+            ].map((step, i) => (
+              <View key={i} style={styles.flowStep}>
+                <View style={[styles.flowStepIcon, step.done && styles.flowStepIconDone]}>
+                  <Feather name={step.icon as any} size={14} color={step.done ? "#000" : C.textMuted} />
+                </View>
+                <Text style={[styles.flowStepText, step.done && { color: C.text }]}>
+                  {step.label}
+                </Text>
+                {step.done && <Ionicons name="checkmark-circle" size={16} color={C.success} />}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ── Tab: Histórico ── */}
+      {tab === "historico" && (
+        <FlatList
+          data={historyServices}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 120 }}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            historyServices.length > 0 ? (
+              <View style={styles.historySummary}>
+                <View style={styles.historySummaryItem}>
+                  <Text style={styles.historySummaryValue}>{historyServices.filter(s => s.status === "rated").length}</Text>
+                  <Text style={styles.historySummaryLabel}>Pagos</Text>
+                </View>
+                <View style={styles.historySummarySep} />
+                <View style={styles.historySummaryItem}>
+                  <Text style={[styles.historySummaryValue, { color: C.success }]}>
+                    R$ {totalEarnedSession.toFixed(2)}
+                  </Text>
+                  <Text style={styles.historySummaryLabel}>Recebido nesta sessão</Text>
+                </View>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Feather name="clock" size={36} color={C.textMuted} />
+              </View>
+              <Text style={styles.emptyTitle}>Nenhum histórico</Text>
+              <Text style={styles.emptyDesc}>
+                Seus serviços concluídos aparecerão aqui com valor e data
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => <HistoryCard service={item} />}
+        />
+      )}
     </View>
   );
 }
@@ -846,5 +965,150 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: C.textMuted,
     flex: 1,
+  },
+  // TAB SWITCHER
+  tabRow: {
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: C.backgroundSecondary,
+    borderRadius: 14,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  tabBtnActive: {
+    backgroundColor: C.primary,
+  },
+  tabBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary,
+  },
+  tabBtnTextActive: {
+    color: "#000",
+    fontFamily: "Inter_700Bold",
+  },
+  // HISTORY
+  historySummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  historySummaryItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  historySummarySep: {
+    width: 1,
+    height: 36,
+    backgroundColor: C.border,
+  },
+  historySummaryValue: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: C.text,
+  },
+  historySummaryLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
+    textAlign: "center",
+  },
+  historyCard: {
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 10,
+  },
+  historyCardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  historyCardTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: C.text,
+  },
+  historyCardMeta: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textTertiary,
+  },
+  historyEarned: {
+    backgroundColor: C.successLight,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: C.success,
+  },
+  historyEarnedValue: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: C.success,
+  },
+  historyCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  historyStatusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  historyStatusRated: {
+    backgroundColor: C.successLight,
+    borderColor: C.success,
+  },
+  historyStatusCompleted: {
+    backgroundColor: C.warningLight,
+    borderColor: C.warning,
+  },
+  historyStatusText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  historyDate: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textTertiary,
+  },
+  historyRatingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  historyRatingLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
+    marginRight: 4,
+  },
+  historyRatingNum: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: C.gold,
+    marginLeft: 4,
   },
 });
