@@ -441,7 +441,7 @@ function ProviderRegisterGate() {
 
 export default function ProviderScreen() {
   const insets = useSafeAreaInsets();
-  const { activeService, provider, services } = useApp();
+  const { activeService, provider, services, pendingEarnings } = useApp();
   const [tab, setTab] = useState<"ativo" | "historico">("ativo");
 
   // Hooks must always run — before any conditional return
@@ -488,10 +488,21 @@ export default function ProviderScreen() {
           <Text style={styles.statLabel}>Concluídos</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={[styles.statValue, { color: C.success, fontSize: 15 }]}>
-            R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
-          </Text>
-          <Text style={styles.statLabel}>Total ganho</Text>
+          {pendingEarnings > 0 ? (
+            <>
+              <Text style={[styles.statValue, { color: C.warning, fontSize: 14 }]}>
+                R$ {pendingEarnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+              </Text>
+              <Text style={styles.statLabel}>Pendente 🔒</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.statValue, { color: C.success, fontSize: 14 }]}>
+                R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+              </Text>
+              <Text style={styles.statLabel}>Disponível</Text>
+            </>
+          )}
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statValue}>{provider.rating} ⭐</Text>

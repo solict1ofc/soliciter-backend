@@ -30,9 +30,8 @@ export type Service = {
   clientRating?: number;
   providerRating?: number;
   chatMessages?: ChatMessage[];
-  // Unread counters: messages the role hasn't seen yet
-  unreadClient?: number;   // new messages FROM provider, not yet seen by client
-  unreadProvider?: number; // new messages FROM client, not yet seen by provider
+  unreadClient?: number;
+  unreadProvider?: number;
 };
 
 export type ChatMessage = {
@@ -47,13 +46,13 @@ export type ProviderPlan = "free" | "basic" | "destaque" | "premium";
 export type ProviderRegistration = {
   fullName: string;
   cpf: string;
-  birthDate: string;       // DD/MM/YYYY
+  birthDate: string;
   phone: string;
-  specialty: string;       // área de atuação
+  specialty: string;
   city: string;
   neighborhood: string;
   acceptedTerms: boolean;
-  registeredAt: string;    // ISO date
+  registeredAt: string;
 };
 
 export type ProviderProfile = {
@@ -65,13 +64,16 @@ export type ProviderProfile = {
   planExpiresAt?: string;
   activeServiceId?: string;
   completedJobs: number;
+  /** Saldo disponível para saque (liberado após cliente confirmar) */
   earnings: number;
+  /** Total histórico sacado */
+  withdrawn: number;
   registered: boolean;
   registration?: ProviderRegistration;
 };
 
 const SERVICES_KEY = "servicosapp_services_v2";
-const PROVIDER_KEY = "servicosapp_provider_v2";
+const PROVIDER_KEY = "servicosapp_provider_v3";
 
 export const URGENT_FEE = 10;
 export const PLATFORM_FEE_RATE = 0.1;
@@ -85,8 +87,15 @@ const defaultProvider: ProviderProfile = {
   activeServiceId: undefined,
   completedJobs: 0,
   earnings: 0,
+  withdrawn: 0,
   registered: false,
 };
+
+/** Calcula o ganho líquido do prestador em um serviço */
+export function calcProviderEarning(service: Service, plan: ProviderPlan): number {
+  const fee = plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
+  return service.finalValue - fee;
+}
 
 function useAppContextValue() {
   const [services, setServices] = useState<Service[]>([]);
@@ -104,7 +113,11 @@ function useAppContextValue() {
         AsyncStorage.getItem(PROVIDER_KEY),
       ]);
       if (servicesJson) setServices(JSON.parse(servicesJson));
-      if (providerJson) setProvider(JSON.parse(providerJson));
+      if (providerJson) {
+        const saved = JSON.parse(providerJson) as ProviderProfile;
+        // Migrate: ensure withdrawn field exists
+        setProvider({ withdrawn: 0, ...saved });
+      }
     } catch (e) {
       // silent
     } finally {
@@ -122,7 +135,17 @@ function useAppContextValue() {
     await AsyncStorage.setItem(PROVIDER_KEY, JSON.stringify(updated));
   }, []);
 
-  // 1. Client creates service → status = pending_payment
+  // ─── Saldo pendente (em custódia) ─────────────────────────────────────────
+  // Calculado dinamicamente: serviços aceitos/em andamento/concluídos aguardando confirmação
+  const pendingEarnings = services
+    .filter(
+      (s) =>
+        s.providerId === provider.id &&
+        (s.status === "accepted" || s.status === "in_progress" || s.status === "completed")
+    )
+    .reduce((sum, s) => sum + calcProviderEarning(s, provider.plan), 0);
+
+  // ─── 1. Cliente cria serviço → pending_payment ────────────────────────────
   const createService = useCallback(
     async (data: {
       title: string;
@@ -153,7 +176,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // 2. Client pays → status = available (appears in Global)
+  // ─── 2. Cliente paga → available (valor retido na plataforma) ─────────────
   const confirmPayment = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -164,7 +187,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // 3. Provider accepts → status = accepted
+  // ─── 3. Prestador aceita → accepted (valor vai para saldo pendente) ────────
   const acceptService = useCallback(
     async (serviceId: string) => {
       if (provider.activeServiceId) return false;
@@ -185,7 +208,7 @@ function useAppContextValue() {
     [services, provider, saveServices, saveProvider]
   );
 
-  // 4. Provider starts work → status = in_progress
+  // ─── 4. Prestador inicia → in_progress ────────────────────────────────────
   const startService = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -202,7 +225,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // 5. Provider finalizes → status = completed
+  // ─── 5. Prestador finaliza → completed (aguardando confirmação do cliente) ─
   const finalizeService = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -219,17 +242,15 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // 6. Client confirms payment + rates provider → status = rated (applies 10% fee)
+  // ─── 6. Cliente confirma + avalia → rated ─────────────────────────────────
+  // Só aqui o valor sai da custódia e vai para saldo DISPONÍVEL do prestador
   const confirmAndRate = useCallback(
     async (serviceId: string, rating: number) => {
       const service = services.find((s) => s.id === serviceId);
       if (!service) return null;
 
-      const fee =
-        provider.plan === "free"
-          ? service.finalValue * PLATFORM_FEE_RATE
-          : 0;
-      const providerEarning = service.finalValue - fee;
+      const providerEarning = calcProviderEarning(service, provider.plan);
+      const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
 
       const totalRatings = provider.totalRatings + 1;
       const newRating =
@@ -247,10 +268,12 @@ function useAppContextValue() {
       );
       await saveServices(updated);
 
+      // Libera o valor: sai da custódia (pendente) e entra no saldo disponível
       await saveProvider({
         ...provider,
         activeServiceId: undefined,
         completedJobs: provider.completedJobs + 1,
+        // earnings = saldo disponível para saque
         earnings: provider.earnings + providerEarning,
         rating: Math.round(newRating * 10) / 10,
         totalRatings,
@@ -274,7 +297,6 @@ function useAppContextValue() {
           ? {
               ...s,
               chatMessages: [...(s.chatMessages ?? []), msg],
-              // Increment unread counter for the RECIPIENT
               unreadClient: senderId === "provider"
                 ? (s.unreadClient ?? 0) + 1
                 : (s.unreadClient ?? 0),
@@ -330,6 +352,20 @@ function useAppContextValue() {
     [provider, saveProvider]
   );
 
+  // ─── Saque: move do saldo disponível para histórico de saques ─────────────
+  const withdrawEarnings = useCallback(
+    async (amount: number) => {
+      if (amount > provider.earnings) return false;
+      await saveProvider({
+        ...provider,
+        earnings: provider.earnings - amount,
+        withdrawn: (provider.withdrawn ?? 0) + amount,
+      });
+      return true;
+    },
+    [provider, saveProvider]
+  );
+
   const availableServices = services.filter((s) => s.status === "available");
   const activeService = provider.activeServiceId
     ? services.find((s) => s.id === provider.activeServiceId)
@@ -340,6 +376,7 @@ function useAppContextValue() {
     availableServices,
     activeService,
     provider,
+    pendingEarnings,
     loading,
     createService,
     confirmPayment,
@@ -351,6 +388,7 @@ function useAppContextValue() {
     markChatRead,
     subscribePlan,
     registerProvider,
+    withdrawEarnings,
     PLATFORM_FEE_RATE,
     URGENT_FEE,
   };

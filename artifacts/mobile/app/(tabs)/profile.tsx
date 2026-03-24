@@ -115,7 +115,7 @@ type WithdrawMethod = "pix" | "bank";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { provider, subscribePlan } = useApp();
+  const { provider, subscribePlan, pendingEarnings, withdrawEarnings } = useApp();
   const [selectedPlan, setSelectedPlan] = useState<PlanConfig | null>(null);
   const [subscribing, setSubscribing] = useState(false);
   const [withdrawModal, setWithdrawModal] = useState(false);
@@ -265,8 +265,25 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* ── CARTEIRA / SAQUE ── */}
+        {/* ── CARTEIRA ── */}
         <View style={styles.walletCard}>
+          {/* Saldo Pendente (em custódia) */}
+          {pendingEarnings > 0 && (
+            <View style={styles.pendingRow}>
+              <View style={styles.pendingIconWrap}>
+                <Ionicons name="lock-closed" size={20} color={C.warning} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pendingLabel}>Saldo Pendente (em custódia)</Text>
+                <Text style={styles.pendingValue}>
+                  R$ {pendingEarnings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                </Text>
+              </View>
+            </View>
+          )}
+          {pendingEarnings > 0 && <View style={styles.walletDivider} />}
+
+          {/* Saldo Disponível (para saque) */}
           <View style={styles.walletHeader}>
             <View style={styles.walletIconWrap}>
               <Ionicons name="wallet" size={24} color={C.success} />
@@ -278,20 +295,49 @@ export default function ProfileScreen() {
               </Text>
             </View>
             <Pressable
-              style={({ pressed }) => [styles.withdrawBtn, pressed && { opacity: 0.85 }]}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setWithdrawSuccess(false); setWithdrawModal(true); }}
+              style={({ pressed }) => [
+                styles.withdrawBtn,
+                provider.earnings <= 0 && styles.withdrawBtnDisabled,
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setWithdrawSuccess(false);
+                setWithdrawModal(true);
+              }}
               disabled={provider.earnings <= 0}
             >
-              <Ionicons name="arrow-up-circle-outline" size={18} color="#000" />
-              <Text style={styles.withdrawBtnText}>Sacar</Text>
+              <Ionicons name="arrow-up-circle-outline" size={18} color={provider.earnings <= 0 ? C.textMuted : "#000"} />
+              <Text style={[styles.withdrawBtnText, provider.earnings <= 0 && { color: C.textMuted }]}>Sacar</Text>
             </Pressable>
           </View>
-          <View style={styles.walletInfoRow}>
-            <Ionicons name="information-circle-outline" size={14} color={C.textTertiary} />
-            <Text style={styles.walletInfoText}>
-              Saque via PIX em até 1 dia útil. Mínimo R$ 10,00.
-            </Text>
-          </View>
+
+          {/* Custódia info */}
+          {pendingEarnings > 0 ? (
+            <View style={[styles.walletInfoRow, { backgroundColor: "rgba(255,184,0,0.08)", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "rgba(255,184,0,0.2)" }]}>
+              <Ionicons name="lock-closed-outline" size={14} color={C.warning} />
+              <Text style={[styles.walletInfoText, { color: C.warning }]}>
+                R$ {pendingEarnings.toFixed(2)} retido na plataforma. Será liberado após o cliente confirmar o serviço.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.walletInfoRow}>
+              <Ionicons name="information-circle-outline" size={14} color={C.textTertiary} />
+              <Text style={styles.walletInfoText}>
+                Saque via PIX em até 1 dia útil · Mínimo R$ 10,00
+              </Text>
+            </View>
+          )}
+
+          {/* Histórico de saques */}
+          {(provider.withdrawn ?? 0) > 0 && (
+            <View style={styles.walletInfoRow}>
+              <Ionicons name="checkmark-circle-outline" size={14} color={C.success} />
+              <Text style={[styles.walletInfoText, { color: C.success }]}>
+                Total sacado: R$ {(provider.withdrawn ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -513,7 +559,12 @@ export default function ProfileScreen() {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                     setWithdrawing(true);
                     await new Promise((r) => setTimeout(r, 2000));
+                    const ok = await withdrawEarnings(amt);
                     setWithdrawing(false);
+                    if (!ok) {
+                      Alert.alert("Erro", "Saldo insuficiente para saque.");
+                      return;
+                    }
                     setWithdrawSuccess(true);
                   }}
                 >
@@ -1019,6 +1070,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_700Bold",
     color: "#000",
+  },
+  withdrawBtnDisabled: {
+    backgroundColor: C.backgroundTertiary,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  walletDivider: {
+    height: 1,
+    backgroundColor: C.border,
+    marginVertical: 2,
+  },
+  pendingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "rgba(255,184,0,0.07)",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,184,0,0.25)",
+  },
+  pendingIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,184,0,0.15)",
+    borderWidth: 1,
+    borderColor: C.warning,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pendingLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: C.warning,
+    marginBottom: 3,
+    opacity: 0.85,
+  },
+  pendingValue: {
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
+    color: C.warning,
   },
   walletInfoRow: {
     flexDirection: "row",
