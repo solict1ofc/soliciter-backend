@@ -21,14 +21,18 @@ const PLAN_CONFIG: Record<string, { name: string; amountInCents: number }> = {
 router.post("/criar-assinatura", async (req, res) => {
   try {
     const { plan, userId } = req.body as { plan: string; userId?: string | number };
+    console.log(`[criar-assinatura] Requisição recebida: plan=${plan} userId=${userId}`);
+
     const config = PLAN_CONFIG[plan];
 
     if (!plan || !config) {
+      console.error(`[criar-assinatura] Plano inválido: "${plan}". Opções válidas: basic, destaque, premium`);
       return res.status(400).json({ error: "Plano inválido. Use: basic, destaque ou premium." });
     }
 
     const stripe = await getUncachableStripeClient();
     const apiBase = getApiBase(req);
+    console.log(`[criar-assinatura] Criando sessão Stripe para plano="${plan}" valor=R$${(config.amountInCents / 100).toFixed(2)} apiBase=${apiBase}`);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -53,10 +57,16 @@ router.post("/criar-assinatura", async (req, res) => {
       metadata: { plan, userId: userId?.toString() ?? "" },
     });
 
+    if (!session.url) {
+      console.error("[criar-assinatura] Stripe não retornou URL de checkout");
+      return res.status(500).json({ error: "Stripe não retornou URL de checkout. Tente novamente." });
+    }
+
+    console.log(`[criar-assinatura] Sessão criada com sucesso. id=${session.id} url=${session.url}`);
     res.json({ url: session.url });
   } catch (error: any) {
-    console.error("[criar-assinatura]", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("[criar-assinatura] ERRO:", error.message, error.stack?.split("\n")[0]);
+    res.status(500).json({ error: error.message ?? "Erro interno ao criar assinatura." });
   }
 });
 

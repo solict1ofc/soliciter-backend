@@ -363,19 +363,38 @@ function useAppContextValue() {
   const subscribePlan = useCallback(
     async (plan: ProviderPlan): Promise<string | null> => {
       try {
-        const res = await fetch(`${API_BASE}/criar-assinatura`, {
+        const endpoint = `${API_BASE}/criar-assinatura`;
+        console.log(`[subscribePlan] Iniciando assinatura: plano="${plan}" userId=${user?.id}`);
+        console.log(`[subscribePlan] Endpoint: POST ${endpoint}`);
+
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ plan, userId: user?.id }),
         });
+
+        console.log(`[subscribePlan] Resposta HTTP: ${res.status}`);
+
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? `Erro ${res.status}`);
+          const errMsg = data.error ?? `Erro HTTP ${res.status}`;
+          console.error(`[subscribePlan] ERRO do servidor: ${errMsg}`);
+          throw new Error(errMsg);
         }
-        const { url } = await res.json();
-        if (!url) throw new Error("URL de checkout inválida");
+
+        const body = await res.json();
+        console.log(`[subscribePlan] Body da resposta:`, JSON.stringify(body));
+
+        const { url } = body;
+        if (!url) {
+          console.error("[subscribePlan] URL de checkout ausente na resposta");
+          throw new Error("URL de checkout inválida — contate o suporte.");
+        }
+
+        console.log(`[subscribePlan] URL de checkout obtida com sucesso: ${url.substring(0, 60)}...`);
         return url as string;
       } catch (err: any) {
+        console.error("[subscribePlan] ERRO capturado:", err.message);
         Alert.alert("Erro na assinatura", err.message ?? "Tente novamente.");
         return null;
       }

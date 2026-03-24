@@ -600,8 +600,8 @@ export default function SolicitacoesScreen() {
       Alert.alert("Localização obrigatória", "Selecione a cidade e o bairro antes de continuar.");
       return;
     }
-    if (numericValue <= 0) {
-      Alert.alert("Valor inválido", "Informe um valor maior que zero.");
+    if (numericValue < 5) {
+      Alert.alert("Valor mínimo", "O valor mínimo para uma solicitação é R$ 5,00.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);

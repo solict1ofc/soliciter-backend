@@ -22,8 +22,14 @@ router.post("/payment/create-checkout", async (req, res) => {
       urgent?: boolean;
     };
 
-    if (!serviceId || !amountInCents || amountInCents < 50) {
-      return res.status(400).json({ error: "serviceId e amountInCents são obrigatórios" });
+    // Stripe minimum: payment must be at least ~$0.50 USD — in BRL that's ~R$3.00
+    // We enforce R$5.00 minimum for safety margin
+    const MINIMUM_CENTS = 500; // R$5.00
+    if (!serviceId || !amountInCents || amountInCents < MINIMUM_CENTS) {
+      console.error(`[payment/create-checkout] Valor inválido: ${amountInCents} centavos (mínimo ${MINIMUM_CENTS})`);
+      return res.status(400).json({
+        error: `Valor mínimo para pagamento é R$ ${(MINIMUM_CENTS / 100).toFixed(2).replace(".", ",")}`,
+      });
     }
 
     const stripe = await getUncachableStripeClient();
