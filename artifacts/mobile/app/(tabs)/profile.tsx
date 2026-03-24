@@ -138,10 +138,34 @@ export default function ProfileScreen() {
   const [subscribing, setSubscribing] = useState(false);
   const [withdrawModal, setWithdrawModal] = useState(false);
   const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod>("pix");
+  // PIX
   const [pixKey, setPixKey] = useState("");
+  // Conta bancária
+  const [bankHolder, setBankHolder] = useState("");
+  const [bankCPF, setBankCPF] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankAgency, setBankAgency] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
+  const [bankAccountType, setBankAccountType] = useState<"corrente" | "poupanca">("corrente");
+  // Controle
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+
+  const resetWithdrawForm = () => {
+    setPixKey("");
+    setBankHolder(""); setBankCPF(""); setBankName("");
+    setBankAgency(""); setBankAccount(""); setBankAccountType("corrente");
+    setWithdrawAmount(""); setWithdrawSuccess(false);
+    setWithdrawMethod("pix");
+  };
+
+  const isWithdrawFormValid = () => {
+    const amt = parseFloat(withdrawAmount.replace(",", "."));
+    if (isNaN(amt) || amt < 10 || amt > provider.earnings) return false;
+    if (withdrawMethod === "pix") return pixKey.trim().length > 0;
+    return !!(bankHolder.trim() && bankCPF.trim() && bankName.trim() && bankAgency.trim() && bankAccount.trim());
+  };
 
   const handleSubscribe = async (plan: PlanConfig) => {
     if (subscribing) return;
@@ -339,7 +363,7 @@ export default function ProfileScreen() {
               ]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setWithdrawSuccess(false);
+                resetWithdrawForm();
                 setWithdrawModal(true);
               }}
               disabled={provider.earnings <= 0}
@@ -482,7 +506,7 @@ export default function ProfileScreen() {
         visible={withdrawModal}
         transparent
         animationType="slide"
-        onRequestClose={() => { if (!withdrawing) setWithdrawModal(false); }}
+        onRequestClose={() => { if (!withdrawing) { setWithdrawModal(false); resetWithdrawForm(); } }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -493,18 +517,27 @@ export default function ProfileScreen() {
                 </View>
                 <Text style={[styles.modalTitle, { textAlign: "center" }]}>Saque Solicitado!</Text>
                 <Text style={[styles.planModalSubtitle, { textAlign: "center" }]}>
-                  O valor será creditado em até 1 dia útil na sua chave PIX.
+                  {withdrawMethod === "pix"
+                    ? "O valor será creditado em até 1 dia útil na sua chave PIX."
+                    : "O valor será transferido em até 2 dias úteis para sua conta bancária."}
                 </Text>
                 <View style={styles.withdrawSuccessBox}>
                   <Text style={styles.withdrawSuccessLabel}>Valor solicitado</Text>
                   <Text style={styles.withdrawSuccessValue}>
                     R$ {parseFloat(withdrawAmount.replace(",", ".") || "0").toFixed(2)}
                   </Text>
-                  <Text style={styles.withdrawSuccessKey}>→ PIX: {pixKey}</Text>
+                  {withdrawMethod === "pix" ? (
+                    <Text style={styles.withdrawSuccessKey}>→ PIX: {pixKey}</Text>
+                  ) : (
+                    <>
+                      <Text style={styles.withdrawSuccessKey}>→ Banco: {bankName}</Text>
+                      <Text style={styles.withdrawSuccessKey}>→ Ag: {bankAgency} · Conta: {bankAccount} ({bankAccountType})</Text>
+                    </>
+                  )}
                 </View>
                 <Pressable
                   style={({ pressed }) => [styles.subscribeCta, { backgroundColor: C.primary }, pressed && { opacity: 0.85 }]}
-                  onPress={() => setWithdrawModal(false)}
+                  onPress={() => { setWithdrawModal(false); resetWithdrawForm(); }}
                 >
                   <Text style={[styles.subscribeCtaText, { color: "#000" }]}>Fechar</Text>
                 </Pressable>
@@ -513,7 +546,7 @@ export default function ProfileScreen() {
               <>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Solicitar Saque</Text>
-                  <Pressable onPress={() => setWithdrawModal(false)} style={styles.modalClose} hitSlop={12}>
+                  <Pressable onPress={() => { setWithdrawModal(false); resetWithdrawForm(); }} style={styles.modalClose} hitSlop={12}>
                     <Ionicons name="close-outline" size={20} color={C.textSecondary} />
                   </Pressable>
                 </View>
@@ -545,21 +578,110 @@ export default function ProfileScreen() {
                   </View>
                 </View>
 
-                {/* Key */}
-                <View style={{ gap: 8 }}>
-                  <Text style={styles.inputLabel}>
-                    {withdrawMethod === "pix" ? "Chave PIX (CPF, e-mail ou telefone)" : "Dados Bancários"}
-                  </Text>
-                  <TextInput
-                    style={styles.withdrawInput}
-                    placeholder={withdrawMethod === "pix" ? "Ex: 000.000.000-00" : "Banco • Agência • Conta"}
-                    placeholderTextColor={C.textMuted}
-                    value={pixKey}
-                    onChangeText={setPixKey}
-                    autoCapitalize="none"
-                    keyboardType={withdrawMethod === "pix" ? "email-address" : "default"}
-                  />
-                </View>
+                {/* PIX ou Conta Bancária */}
+                {withdrawMethod === "pix" ? (
+                  <View style={{ gap: 8 }}>
+                    <Text style={styles.inputLabel}>Chave PIX</Text>
+                    <TextInput
+                      style={styles.withdrawInput}
+                      placeholder="CPF, e-mail, telefone ou chave aleatória"
+                      placeholderTextColor={C.textMuted}
+                      value={pixKey}
+                      onChangeText={setPixKey}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+                    <Text style={styles.withdrawHint}>Ex: 000.000.000-00 · email@dominio.com · +55 (62) 99999-9999</Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 12 }}>
+                    <Text style={styles.inputLabel}>Dados da Conta Bancária</Text>
+
+                    <View style={{ gap: 6 }}>
+                      <Text style={styles.withdrawFieldLabel}>Nome completo do titular *</Text>
+                      <TextInput
+                        style={styles.withdrawInput}
+                        placeholder="Nome como no documento"
+                        placeholderTextColor={C.textMuted}
+                        value={bankHolder}
+                        onChangeText={setBankHolder}
+                        autoCapitalize="words"
+                      />
+                    </View>
+
+                    <View style={{ gap: 6 }}>
+                      <Text style={styles.withdrawFieldLabel}>CPF do titular *</Text>
+                      <TextInput
+                        style={styles.withdrawInput}
+                        placeholder="000.000.000-00"
+                        placeholderTextColor={C.textMuted}
+                        value={bankCPF}
+                        onChangeText={setBankCPF}
+                        keyboardType="numeric"
+                      />
+                    </View>
+
+                    <View style={{ gap: 6 }}>
+                      <Text style={styles.withdrawFieldLabel}>Banco *</Text>
+                      <TextInput
+                        style={styles.withdrawInput}
+                        placeholder="Ex: Nubank, Itaú, Bradesco, Caixa..."
+                        placeholderTextColor={C.textMuted}
+                        value={bankName}
+                        onChangeText={setBankName}
+                        autoCapitalize="words"
+                      />
+                    </View>
+
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <View style={{ flex: 1, gap: 6 }}>
+                        <Text style={styles.withdrawFieldLabel}>Agência *</Text>
+                        <TextInput
+                          style={styles.withdrawInput}
+                          placeholder="0001"
+                          placeholderTextColor={C.textMuted}
+                          value={bankAgency}
+                          onChangeText={setBankAgency}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <View style={{ flex: 2, gap: 6 }}>
+                        <Text style={styles.withdrawFieldLabel}>Número da conta *</Text>
+                        <TextInput
+                          style={styles.withdrawInput}
+                          placeholder="00000000-0"
+                          placeholderTextColor={C.textMuted}
+                          value={bankAccount}
+                          onChangeText={setBankAccount}
+                          keyboardType="numeric"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={{ gap: 6 }}>
+                      <Text style={styles.withdrawFieldLabel}>Tipo de conta *</Text>
+                      <View style={{ flexDirection: "row", gap: 10 }}>
+                        {(["corrente", "poupanca"] as const).map((t) => (
+                          <Pressable
+                            key={t}
+                            style={[
+                              styles.accountTypeBtn,
+                              bankAccountType === t && styles.accountTypeBtnActive,
+                            ]}
+                            onPress={() => setBankAccountType(t)}
+                          >
+                            <Text style={[
+                              styles.accountTypeBtnLabel,
+                              bankAccountType === t && { color: C.primary },
+                            ]}>
+                              {t === "corrente" ? "Corrente" : "Poupança"}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                )}
 
                 {/* Amount */}
                 <View style={{ gap: 8 }}>
@@ -579,10 +701,10 @@ export default function ProfileScreen() {
                   style={({ pressed }) => [
                     styles.subscribeCta,
                     { backgroundColor: C.success },
-                    (!pixKey.trim() || !withdrawAmount.trim()) && { opacity: 0.4 },
+                    !isWithdrawFormValid() && { opacity: 0.4 },
                     pressed && { opacity: 0.85 },
                   ]}
-                  disabled={!pixKey.trim() || !withdrawAmount.trim() || withdrawing}
+                  disabled={!isWithdrawFormValid() || withdrawing}
                   onPress={async () => {
                     const amt = parseFloat(withdrawAmount.replace(",", "."));
                     if (isNaN(amt) || amt < 10) {
@@ -590,12 +712,23 @@ export default function ProfileScreen() {
                       return;
                     }
                     if (amt > provider.earnings) {
-                      Alert.alert("Saldo insuficiente", "O valor solicitado é maior que seu saldo.");
+                      Alert.alert("Saldo insuficiente", `Seu saldo disponível é R$ ${provider.earnings.toFixed(2)}.`);
                       return;
+                    }
+                    if (withdrawMethod === "pix" && !pixKey.trim()) {
+                      Alert.alert("Campo obrigatório", "Informe sua chave PIX para continuar.");
+                      return;
+                    }
+                    if (withdrawMethod === "bank") {
+                      if (!bankHolder.trim()) { Alert.alert("Campo obrigatório", "Informe o nome do titular."); return; }
+                      if (!bankCPF.trim()) { Alert.alert("Campo obrigatório", "Informe o CPF do titular."); return; }
+                      if (!bankName.trim()) { Alert.alert("Campo obrigatório", "Informe o banco."); return; }
+                      if (!bankAgency.trim()) { Alert.alert("Campo obrigatório", "Informe a agência."); return; }
+                      if (!bankAccount.trim()) { Alert.alert("Campo obrigatório", "Informe o número da conta."); return; }
                     }
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                     setWithdrawing(true);
-                    await new Promise((r) => setTimeout(r, 2000));
+                    await new Promise((r) => setTimeout(r, 1500));
                     const ok = await withdrawEarnings(amt);
                     setWithdrawing(false);
                     if (!ok) {
@@ -1267,6 +1400,26 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: C.textMuted,
     textAlign: "center",
+  },
+  withdrawFieldLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: C.textSecondary,
+  },
+  accountTypeBtn: {
+    flex: 1, paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1,
+    borderColor: C.border, alignItems: "center",
+    backgroundColor: C.backgroundTertiary,
+  },
+  accountTypeBtnActive: {
+    borderColor: C.primary,
+    backgroundColor: C.primaryGlow,
+  },
+  accountTypeBtnLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary,
   },
   withdrawSuccessIcon: {
     width: 100,
