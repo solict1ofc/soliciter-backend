@@ -26,14 +26,14 @@ const C = Colors.dark;
 
 const USER_CITY = "Goiânia"; // default user city
 
-// ─── Pulsing border for urgent ────────────────────────────────────────────────
+// ─── Pulsing glow border for urgent ──────────────────────────────────────────
 function UrgentBorder() {
   const anim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.15, duration: 500, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 1, duration: 500, useNativeDriver: true }),
       ])
     );
     pulse.start();
@@ -44,6 +44,26 @@ function UrgentBorder() {
       style={[StyleSheet.absoluteFill, styles.urgentBorderAnim, { opacity: anim }]}
       pointerEvents="none"
     />
+  );
+}
+
+// ─── Scale-pulse wrapper for urgent cards ─────────────────────────────────────
+function PulsingCard({ children }: { children: React.ReactNode }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.018, duration: 700, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      {children}
+    </Animated.View>
   );
 }
 
@@ -149,11 +169,12 @@ function FilterSheet({
 
 // ─── Service Card ─────────────────────────────────────────────────────────────
 function ServiceCard({
-  service, onAccept, userCity,
+  service, onAccept, userCity, isNew,
 }: {
   service: Service;
   onAccept: () => void;
   userCity: string;
+  isNew?: boolean;
 }) {
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -166,8 +187,8 @@ function ServiceCard({
 
   const isNearby = service.city === userCity;
 
-  return (
-    <View style={[styles.card, service.urgent && styles.urgentCard]}>
+  const cardContent = (
+    <View style={[styles.card, service.urgent && styles.urgentCard, isNew && styles.newCard]}>
       {service.urgent && <UrgentBorder />}
 
       {/* Top badges row */}
@@ -175,7 +196,13 @@ function ServiceCard({
         {service.urgent && (
           <View style={styles.urgentBadge}>
             <Ionicons name="flash" size={12} color={C.danger} />
-            <Text style={styles.urgentBadgeText}>URGENTE</Text>
+            <Text style={styles.urgentBadgeText}>⚡ URGENTE</Text>
+          </View>
+        )}
+        {isNew && (
+          <View style={styles.newBadge}>
+            <View style={styles.newDot} />
+            <Text style={styles.newBadgeText}>NOVO</Text>
           </View>
         )}
         {isNearby && (
@@ -248,6 +275,8 @@ function ServiceCard({
       </Pressable>
     </View>
   );
+
+  return service.urgent ? <PulsingCard>{cardContent}</PulsingCard> : cardContent;
 }
 
 // ─── Section Header ───────────────────────────────────────────────────────────
@@ -283,6 +312,55 @@ export default function GlobalScreen() {
   const [filterCity, setFilterCity] = useState("");
   const [filterNeighborhood, setFilterNeighborhood] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("nearby");
+  const [newServiceIds, setNewServiceIds] = useState<Set<string>>(new Set());
+  const [urgentCount, setUrgentCount] = useState(0);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const liveDotAnim = useRef(new Animated.Value(1)).current;
+
+  // ── Animate live dot ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(liveDotAnim, { toValue: 0.2, duration: 600, useNativeDriver: true }),
+        Animated.timing(liveDotAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // ── Detect new services (including urgent) ────────────────────────────────
+  useEffect(() => {
+    const currentIds = new Set(availableServices.map((s) => s.id));
+    const arrived: string[] = [];
+    for (const id of currentIds) {
+      if (!seenIdsRef.current.has(id)) arrived.push(id);
+    }
+    if (arrived.length > 0) {
+      seenIdsRef.current = currentIds;
+      setNewServiceIds((prev) => {
+        const next = new Set(prev);
+        arrived.forEach((id) => next.add(id));
+        return next;
+      });
+      // Clear "new" badge after 30s
+      const t = setTimeout(() => {
+        setNewServiceIds((prev) => {
+          const next = new Set(prev);
+          arrived.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, 30_000);
+      return () => clearTimeout(t);
+    } else {
+      seenIdsRef.current = currentIds;
+    }
+  }, [availableServices]);
+
+  // ── Count urgent for header indicator ─────────────────────────────────────
+  useEffect(() => {
+    setUrgentCount(availableServices.filter((s) => s.urgent).length);
+  }, [availableServices]);
 
   // Sort: urgent first, then user's city, then by value desc
   const sortedServices = useMemo(() => {
@@ -387,9 +465,19 @@ export default function GlobalScreen() {
             {totalCount} serviço{totalCount !== 1 ? "s" : ""} disponível{totalCount !== 1 ? "s" : ""}
           </Text>
         </View>
-        <View style={styles.headerBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>AO VIVO</Text>
+        <View style={{ gap: 6, alignItems: "flex-end" }}>
+          <View style={styles.headerBadge}>
+            <Animated.View style={[styles.liveDot, { opacity: liveDotAnim }]} />
+            <Text style={styles.liveText}>AO VIVO</Text>
+          </View>
+          {urgentCount > 0 && (
+            <View style={styles.urgentCountBadge}>
+              <Ionicons name="flash" size={11} color={C.danger} />
+              <Text style={styles.urgentCountText}>
+                {urgentCount} urgente{urgentCount !== 1 ? "s" : ""}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -488,6 +576,7 @@ export default function GlobalScreen() {
             service={item}
             userCity={USER_CITY}
             onAccept={() => handleAccept(item)}
+            isNew={newServiceIds.has(item.id)}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
@@ -667,6 +756,7 @@ const styles = StyleSheet.create({
   },
   urgentCard: { borderColor: C.urgentBorder, backgroundColor: "rgba(255, 59, 92, 0.05)" },
   urgentBorderAnim: { borderRadius: 18, borderWidth: 2, borderColor: C.urgentBorder },
+  newCard: { borderColor: C.primary, backgroundColor: "rgba(0, 212, 255, 0.04)" },
 
   // Top badges row
   topBadgesRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
@@ -682,6 +772,23 @@ const styles = StyleSheet.create({
     borderColor: C.danger,
   },
   urgentBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: C.danger, letterSpacing: 1.2 },
+  newBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "rgba(0,212,255,0.12)", borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: C.primary,
+  },
+  newDot: {
+    width: 6, height: 6, borderRadius: 3, backgroundColor: C.primary,
+  },
+  newBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: C.primary, letterSpacing: 1.2 },
+  urgentCountBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: C.dangerLight, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: "rgba(255,59,92,0.3)",
+  },
+  urgentCountText: { fontSize: 10, fontFamily: "Inter_600SemiBold", color: C.danger },
   nearbyBadge: {
     flexDirection: "row",
     alignItems: "center",
