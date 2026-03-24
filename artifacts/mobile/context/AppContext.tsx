@@ -2,8 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import React, { useCallback, useEffect, useState } from "react";
 
-export type Urgency = boolean;
-
 export type ServiceStatus =
   | "pending_payment"
   | "available"
@@ -24,7 +22,9 @@ export type Service = {
   status: ServiceStatus;
   createdAt: string;
   acceptedAt?: string;
+  startedAt?: string;
   completedAt?: string;
+  ratedAt?: string;
   providerId?: string;
   clientRating?: number;
   providerRating?: number;
@@ -52,11 +52,11 @@ export type ProviderProfile = {
   earnings: number;
 };
 
-const SERVICES_KEY = "servicosapp_services";
-const PROVIDER_KEY = "servicosapp_provider";
+const SERVICES_KEY = "servicosapp_services_v2";
+const PROVIDER_KEY = "servicosapp_provider_v2";
 
-const URGENT_FEE = 10;
-const PLATFORM_FEE_RATE = 0.1;
+export const URGENT_FEE = 10;
+export const PLATFORM_FEE_RATE = 0.1;
 
 const defaultProvider: ProviderProfile = {
   id: "provider_1",
@@ -87,7 +87,7 @@ function useAppContextValue() {
       if (servicesJson) setServices(JSON.parse(servicesJson));
       if (providerJson) setProvider(JSON.parse(providerJson));
     } catch (e) {
-      console.error("Error loading data", e);
+      // silent
     } finally {
       setLoading(false);
     }
@@ -103,6 +103,7 @@ function useAppContextValue() {
     await AsyncStorage.setItem(PROVIDER_KEY, JSON.stringify(updated));
   }, []);
 
+  // 1. Client creates service → status = pending_payment
   const createService = useCallback(
     async (data: {
       title: string;
@@ -126,13 +127,13 @@ function useAppContextValue() {
         createdAt: new Date().toISOString(),
         chatMessages: [],
       };
-      const updated = [...services, newService];
-      await saveServices(updated);
+      await saveServices([...services, newService]);
       return newService;
     },
     [services, saveServices]
   );
 
+  // 2. Client pays → status = available (appears in Global)
   const confirmPayment = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -143,6 +144,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
+  // 3. Provider accepts → status = accepted
   const acceptService = useCallback(
     async (serviceId: string) => {
       if (provider.activeServiceId) return false;
@@ -150,20 +152,37 @@ function useAppContextValue() {
         s.id === serviceId
           ? {
               ...s,
-              status: "in_progress" as ServiceStatus,
+              status: "accepted" as ServiceStatus,
               acceptedAt: new Date().toISOString(),
               providerId: provider.id,
             }
           : s
       );
       await saveServices(updated);
-      const updatedProvider = { ...provider, activeServiceId: serviceId };
-      await saveProvider(updatedProvider);
+      await saveProvider({ ...provider, activeServiceId: serviceId });
       return true;
     },
     [services, provider, saveServices, saveProvider]
   );
 
+  // 4. Provider starts work → status = in_progress
+  const startService = useCallback(
+    async (serviceId: string) => {
+      const updated = services.map((s) =>
+        s.id === serviceId
+          ? {
+              ...s,
+              status: "in_progress" as ServiceStatus,
+              startedAt: new Date().toISOString(),
+            }
+          : s
+      );
+      await saveServices(updated);
+    },
+    [services, saveServices]
+  );
+
+  // 5. Provider finalizes → status = completed
   const finalizeService = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -180,70 +199,46 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  const confirmClientPayment = useCallback(
-    async (serviceId: string) => {
+  // 6. Client confirms payment + rates provider → status = rated (applies 10% fee)
+  const confirmAndRate = useCallback(
+    async (serviceId: string, rating: number) => {
       const service = services.find((s) => s.id === serviceId);
-      if (!service) return;
+      if (!service) return null;
 
-      const fee = service.finalValue * PLATFORM_FEE_RATE;
+      const fee =
+        provider.plan === "free"
+          ? service.finalValue * PLATFORM_FEE_RATE
+          : 0;
       const providerEarning = service.finalValue - fee;
 
-      const updated = services.map((s) =>
-        s.id === serviceId ? { ...s, status: "rated" as ServiceStatus } : s
-      );
-      await saveServices(updated);
+      const totalRatings = provider.totalRatings + 1;
+      const newRating =
+        (provider.rating * provider.totalRatings + rating) / totalRatings;
 
-      const updatedProvider = {
-        ...provider,
-        activeServiceId: undefined,
-        completedJobs: provider.completedJobs + 1,
-        earnings: provider.earnings + providerEarning,
-      };
-      await saveProvider(updatedProvider);
-
-      return { fee, providerEarning };
-    },
-    [services, provider, saveServices, saveProvider]
-  );
-
-  const rateService = useCallback(
-    async (serviceId: string, rating: number, raterType: "client" | "provider") => {
       const updated = services.map((s) =>
         s.id === serviceId
-          ? raterType === "client"
-            ? { ...s, clientRating: rating }
-            : { ...s, providerRating: rating }
+          ? {
+              ...s,
+              status: "rated" as ServiceStatus,
+              clientRating: rating,
+              ratedAt: new Date().toISOString(),
+            }
           : s
       );
       await saveServices(updated);
 
-      if (raterType === "client") {
-        const totalRatings = provider.totalRatings + 1;
-        const newRating =
-          (provider.rating * provider.totalRatings + rating) / totalRatings;
-        const updatedProvider = {
-          ...provider,
-          rating: Math.round(newRating * 10) / 10,
-          totalRatings,
-        };
-        await saveProvider(updatedProvider);
-      }
+      await saveProvider({
+        ...provider,
+        activeServiceId: undefined,
+        completedJobs: provider.completedJobs + 1,
+        earnings: provider.earnings + providerEarning,
+        rating: Math.round(newRating * 10) / 10,
+        totalRatings,
+      });
+
+      return { fee, providerEarning, platformFeeApplied: provider.plan === "free" };
     },
     [services, provider, saveServices, saveProvider]
-  );
-
-  const subscribePlan = useCallback(
-    async (plan: ProviderPlan) => {
-      const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
-      const updatedProvider = {
-        ...provider,
-        plan,
-        planExpiresAt: expiresAt.toISOString(),
-      };
-      await saveProvider(updatedProvider);
-    },
-    [provider, saveProvider]
   );
 
   const sendMessage = useCallback(
@@ -264,10 +259,19 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  const availableServices = services.filter((s) => s.status === "available");
-  const activeService = services.find(
-    (s) => s.id === provider.activeServiceId
+  const subscribePlan = useCallback(
+    async (plan: ProviderPlan) => {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      await saveProvider({ ...provider, plan, planExpiresAt: expiresAt.toISOString() });
+    },
+    [provider, saveProvider]
   );
+
+  const availableServices = services.filter((s) => s.status === "available");
+  const activeService = provider.activeServiceId
+    ? services.find((s) => s.id === provider.activeServiceId)
+    : undefined;
 
   return {
     services,
@@ -278,11 +282,11 @@ function useAppContextValue() {
     createService,
     confirmPayment,
     acceptService,
+    startService,
     finalizeService,
-    confirmClientPayment,
-    rateService,
-    subscribePlan,
+    confirmAndRate,
     sendMessage,
+    subscribePlan,
     PLATFORM_FEE_RATE,
     URGENT_FEE,
   };

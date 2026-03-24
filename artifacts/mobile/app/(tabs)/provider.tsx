@@ -3,63 +3,74 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
+import type { Service } from "@/context/AppContext";
 
 const C = Colors.dark;
 
-function StarRating({
-  value,
-  onChange,
-  size = 28,
-}: {
-  value: number;
-  onChange?: (v: number) => void;
-  size?: number;
+function InfoRow({ icon, label, value, valueColor }: {
+  icon: string;
+  label: string;
+  value: string;
+  valueColor?: string;
 }) {
   return (
-    <View style={{ flexDirection: "row", gap: 6 }}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Pressable key={star} onPress={() => onChange?.(star)}>
-          <Ionicons
-            name={star <= value ? "star" : "star-outline"}
-            size={size}
-            color={star <= value ? C.gold : C.textMuted}
-          />
-        </Pressable>
-      ))}
+    <View style={styles.infoRow}>
+      <View style={styles.infoRowLeft}>
+        <Feather name={icon as any} size={14} color={C.primary} />
+        <Text style={styles.infoRowLabel}>{label}</Text>
+      </View>
+      <Text style={[styles.infoRowValue, valueColor ? { color: valueColor } : null]}>
+        {value}
+      </Text>
     </View>
   );
 }
 
-export default function ProviderScreen() {
-  const insets = useSafeAreaInsets();
-  const { activeService, provider, finalizeService, confirmClientPayment, rateService, PLATFORM_FEE_RATE } = useApp();
+function ServiceBlock({ service }: { service: Service }) {
+  const { startService, finalizeService, provider, PLATFORM_FEE_RATE } = useApp();
+  const [starting, setStarting] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
-  const [paymentResult, setPaymentResult] = useState<{
-    fee: number;
-    providerEarning: number;
-  } | null>(null);
-  const [rating, setRating] = useState(0);
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  const [ratingSubmitted, setRatingSubmitted] = useState(false);
 
-  const handleFinalize = async () => {
-    if (!activeService) return;
+  const fee = provider.plan === "free"
+    ? service.finalValue * PLATFORM_FEE_RATE
+    : 0;
+  const providerEarning = service.finalValue - fee;
+
+  const handleStart = () => {
+    Alert.alert(
+      "Iniciar Serviço",
+      "Confirme que você está iniciando a execução do serviço.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Iniciar",
+          onPress: async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            setStarting(true);
+            await startService(service.id);
+            setStarting(false);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleFinalize = () => {
     Alert.alert(
       "Finalizar Serviço",
-      "Tem certeza que deseja marcar este serviço como concluído?",
+      "Confirme que o serviço foi concluído. O cliente será notificado para confirmar o pagamento.",
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -68,7 +79,7 @@ export default function ProviderScreen() {
           onPress: async () => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
             setFinalizing(true);
-            await finalizeService(activeService.id);
+            await finalizeService(service.id);
             setFinalizing(false);
           },
         },
@@ -76,26 +87,217 @@ export default function ProviderScreen() {
     );
   };
 
-  const handleConfirmPayment = async () => {
-    if (!activeService) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const result = await confirmClientPayment(activeService.id);
-    if (result) {
-      setPaymentResult(result);
-      setShowRatingModal(true);
-    }
-  };
+  const isAccepted = service.status === "accepted";
+  const isInProgress = service.status === "in_progress";
+  const isCompleted = service.status === "completed";
+  const isRated = service.status === "rated";
 
-  const handleSubmitRating = async () => {
-    if (!activeService || rating === 0) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await rateService(activeService.id, rating, "provider");
-    setShowRatingModal(false);
-    setRatingSubmitted(true);
-  };
+  return (
+    <View style={styles.activeCard}>
+      {/* Status pill */}
+      <View style={styles.statusRow}>
+        <View
+          style={[
+            styles.statusPill,
+            isAccepted && styles.statusPillAccepted,
+            isInProgress && styles.statusPillInProgress,
+            isCompleted && styles.statusPillCompleted,
+            isRated && styles.statusPillRated,
+          ]}
+        >
+          <View
+            style={[
+              styles.statusDot,
+              isAccepted && { backgroundColor: C.accent },
+              isInProgress && { backgroundColor: C.primary },
+              isCompleted && { backgroundColor: C.warning },
+              isRated && { backgroundColor: C.success },
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusPillText,
+              isAccepted && { color: C.accent },
+              isInProgress && { color: C.primary },
+              isCompleted && { color: C.warning },
+              isRated && { color: C.success },
+            ]}
+          >
+            {isAccepted
+              ? "Aceito"
+              : isInProgress
+              ? "Em andamento"
+              : isCompleted
+              ? "Aguardando cliente"
+              : "Concluído"}
+          </Text>
+        </View>
+        {service.urgent && (
+          <View style={styles.urgentPill}>
+            <Ionicons name="flash" size={11} color={C.danger} />
+            <Text style={styles.urgentPillText}>Urgente</Text>
+          </View>
+        )}
+      </View>
 
-  const isCompleted = activeService?.status === "completed";
-  const isRated = activeService?.status === "rated";
+      <Text style={styles.activeTitle}>{service.title}</Text>
+      <Text style={styles.activeDesc} numberOfLines={3}>
+        {service.description}
+      </Text>
+
+      <View style={styles.infoGrid}>
+        <InfoRow icon="map-pin" label="Cidade" value={service.city} />
+        <InfoRow icon="navigation" label="Bairro" value={service.neighborhood} />
+        <InfoRow
+          icon="clock"
+          label="Aceito em"
+          value={
+            service.acceptedAt
+              ? new Date(service.acceptedAt).toLocaleTimeString("pt-BR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  day: "2-digit",
+                  month: "short",
+                })
+              : "-"
+          }
+        />
+      </View>
+
+      {/* Earnings breakdown */}
+      <View style={styles.earningsBox}>
+        <View style={styles.earningsRow}>
+          <Text style={styles.earningsLabel}>Valor do serviço</Text>
+          <Text style={styles.earningsValue}>R$ {service.finalValue.toFixed(2)}</Text>
+        </View>
+        {provider.plan === "free" && (
+          <View style={styles.earningsRow}>
+            <Text style={[styles.earningsLabel, { color: C.danger }]}>
+              Taxa plataforma (10%)
+            </Text>
+            <Text style={[styles.earningsValue, { color: C.danger }]}>
+              -R$ {fee.toFixed(2)}
+            </Text>
+          </View>
+        )}
+        {provider.plan !== "free" && (
+          <View style={styles.earningsRow}>
+            <Text style={[styles.earningsLabel, { color: C.success }]}>
+              Taxa plataforma
+            </Text>
+            <Text style={[styles.earningsValue, { color: C.success }]}>
+              Isento (plano ativo)
+            </Text>
+          </View>
+        )}
+        <View style={[styles.earningsRow, styles.earningsTotalRow]}>
+          <Text style={styles.earningsTotalLabel}>Você recebe</Text>
+          <Text style={styles.earningsTotalValue}>
+            R$ {providerEarning.toFixed(2)}
+          </Text>
+        </View>
+      </View>
+
+      {/* Chat button */}
+      {(isAccepted || isInProgress) && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.chatBtn,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => router.push(`/chat/${service.id}`)}
+        >
+          <Feather name="message-circle" size={16} color={C.primary} />
+          <Text style={styles.chatBtnText}>Chat com o Cliente</Text>
+        </Pressable>
+      )}
+
+      {/* Action buttons */}
+      {isAccepted && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.actionBtn,
+            { backgroundColor: C.accent },
+            pressed && styles.actionBtnPressed,
+          ]}
+          onPress={handleStart}
+          disabled={starting}
+        >
+          {starting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="play-circle" size={20} color="#fff" />
+              <Text style={[styles.actionBtnText, { color: "#fff" }]}>
+                Iniciar Serviço
+              </Text>
+            </>
+          )}
+        </Pressable>
+      )}
+
+      {isInProgress && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.actionBtn,
+            { backgroundColor: C.success },
+            pressed && styles.actionBtnPressed,
+          ]}
+          onPress={handleFinalize}
+          disabled={finalizing}
+        >
+          {finalizing ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <>
+              <Ionicons name="checkmark-circle" size={20} color="#000" />
+              <Text style={styles.actionBtnText}>Finalizar Serviço</Text>
+            </>
+          )}
+        </Pressable>
+      )}
+
+      {isCompleted && (
+        <View style={styles.awaitingBox}>
+          <Ionicons name="time-outline" size={18} color={C.warning} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.awaitingTitle}>Aguardando confirmação</Text>
+            <Text style={styles.awaitingDesc}>
+              O cliente precisa confirmar o pagamento e avaliar o serviço para liberar seu pagamento.
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {isRated && (
+        <View style={styles.doneBox}>
+          <View style={styles.doneIconWrap}>
+            <Ionicons name="checkmark-circle" size={40} color={C.success} />
+          </View>
+          <Text style={styles.doneTitle}>Pagamento recebido!</Text>
+          <Text style={styles.doneValue}>+R$ {providerEarning.toFixed(2)}</Text>
+          {service.clientRating !== undefined && (
+            <View style={styles.clientRatingRow}>
+              <Text style={styles.clientRatingLabel}>Avaliação do cliente:</Text>
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Ionicons
+                  key={s}
+                  name={s <= service.clientRating! ? "star" : "star-outline"}
+                  size={18}
+                  color={s <= service.clientRating! ? C.gold : C.textMuted}
+                />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+export default function ProviderScreen() {
+  const insets = useSafeAreaInsets();
+  const { activeService, provider } = useApp();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -108,226 +310,96 @@ export default function ProviderScreen() {
           <Text style={styles.headerTitle}>Área do Prestador</Text>
           <Text style={styles.headerSubtitle}>
             {activeService
-              ? "Serviço em andamento"
+              ? "Você tem um serviço ativo"
               : "Nenhum serviço ativo no momento"}
           </Text>
         </View>
 
+        {/* Stats */}
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statValue}>{provider.completedJobs}</Text>
-            <Text style={styles.statLabel}>Trabalhos</Text>
+            <Text style={styles.statLabel}>Concluídos</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>
+            <Text style={[styles.statValue, { color: C.success, fontSize: 15 }]}>
               R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
             </Text>
-            <Text style={styles.statLabel}>Ganhos</Text>
+            <Text style={styles.statLabel}>Total ganho</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statValue}>{provider.rating}</Text>
+            <Text style={styles.statValue}>{provider.rating} ⭐</Text>
             <Text style={styles.statLabel}>Avaliação</Text>
           </View>
         </View>
 
+        {/* Active service block */}
         {!activeService ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <MaterialCommunityIcons
                 name="briefcase-clock-outline"
-                size={44}
+                size={40}
                 color={C.textMuted}
               />
             </View>
             <Text style={styles.emptyTitle}>Sem serviço ativo</Text>
-            <Text style={styles.emptySubtitle}>
-              Vá para o Mercado Global para aceitar um serviço disponível
+            <Text style={styles.emptyDesc}>
+              Vá para o Mercado Global e aceite um serviço disponível para começar a trabalhar
             </Text>
             <Pressable
               style={({ pressed }) => [
-                styles.goGlobalButton,
+                styles.goGlobalBtn,
                 pressed && { opacity: 0.7 },
               ]}
               onPress={() => router.push("/(tabs)/global")}
             >
-              <Feather name="globe" size={16} color={C.primary} />
-              <Text style={styles.goGlobalButtonText}>Ver Mercado Global</Text>
+              <Feather name="globe" size={15} color={C.primary} />
+              <Text style={styles.goGlobalText}>Ver Mercado Global</Text>
             </Pressable>
           </View>
         ) : (
-          <View style={styles.activeCard}>
-            <View style={styles.activeCardHeader}>
-              <View style={[styles.statusDot, isCompleted && styles.statusDotCompleted, isRated && styles.statusDotRated]} />
-              <Text style={styles.statusLabel}>
-                {isRated
-                  ? "Finalizado"
-                  : isCompleted
-                  ? "Aguardando confirmação"
-                  : "Em andamento"}
-              </Text>
-            </View>
-
-            <Text style={styles.activeTitle}>{activeService.title}</Text>
-            <Text style={styles.activeDescription}>
-              {activeService.description}
-            </Text>
-
-            <View style={styles.activeMetaGrid}>
-              <View style={styles.activeMeta}>
-                <Feather name="map-pin" size={14} color={C.primary} />
-                <Text style={styles.activeMetaText}>{activeService.city}</Text>
-              </View>
-              <View style={styles.activeMeta}>
-                <Feather name="navigation" size={14} color={C.primary} />
-                <Text style={styles.activeMetaText}>{activeService.neighborhood}</Text>
-              </View>
-              <View style={styles.activeMeta}>
-                <Ionicons
-                  name={activeService.urgent ? "flash" : "time-outline"}
-                  size={14}
-                  color={activeService.urgent ? C.danger : C.primary}
-                />
-                <Text style={[styles.activeMetaText, activeService.urgent && { color: C.danger }]}>
-                  {activeService.urgent ? "Urgente" : "Normal"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.valueBox}>
-              <View style={styles.valueBoxRow}>
-                <Text style={styles.valueBoxLabel}>Valor do serviço</Text>
-                <Text style={styles.valueBoxAmount}>
-                  R$ {activeService.finalValue.toFixed(2)}
-                </Text>
-              </View>
-              <View style={styles.valueBoxRow}>
-                <Text style={styles.valueBoxLabel}>Taxa da plataforma ({(PLATFORM_FEE_RATE * 100).toFixed(0)}%)</Text>
-                <Text style={[styles.valueBoxAmount, { color: C.danger }]}>
-                  -R$ {(activeService.finalValue * PLATFORM_FEE_RATE).toFixed(2)}
-                </Text>
-              </View>
-              <View style={[styles.valueBoxRow, styles.valueBoxTotal]}>
-                <Text style={styles.valueBoxTotalLabel}>Você recebe</Text>
-                <Text style={styles.valueBoxTotalAmount}>
-                  R$ {(activeService.finalValue * (1 - PLATFORM_FEE_RATE)).toFixed(2)}
-                </Text>
-              </View>
-            </View>
-
-            {!isCompleted && !isRated && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.chatButton,
-                  pressed && { opacity: 0.7 },
-                ]}
-                onPress={() => router.push(`/chat/${activeService.id}`)}
-              >
-                <Feather name="message-circle" size={18} color={C.primary} />
-                <Text style={styles.chatButtonText}>Chat com o Cliente</Text>
-              </Pressable>
-            )}
-
-            {!isCompleted && !isRated && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.finalizeButton,
-                  pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                ]}
-                onPress={handleFinalize}
-                disabled={finalizing}
-              >
-                {finalizing ? (
-                  <ActivityIndicator color="#000" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={20} color="#000" />
-                    <Text style={styles.finalizeButtonText}>Finalizar Serviço</Text>
-                  </>
-                )}
-              </Pressable>
-            )}
-
-            {isCompleted && !isRated && (
-              <View style={styles.completedActions}>
-                <View style={styles.completedBanner}>
-                  <Ionicons name="time-outline" size={16} color={C.warning} />
-                  <Text style={styles.completedBannerText}>
-                    Aguardando confirmação do cliente
-                  </Text>
-                </View>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.confirmPaymentButton,
-                    pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
-                  ]}
-                  onPress={handleConfirmPayment}
-                >
-                  <Ionicons name="checkmark-done" size={20} color="#000" />
-                  <Text style={styles.confirmPaymentText}>
-                    Confirmar Pagamento do Cliente
-                  </Text>
-                </Pressable>
-              </View>
-            )}
-
-            {isRated && (
-              <View style={styles.completedFinalBox}>
-                <View style={styles.completedFinalIcon}>
-                  <Ionicons name="checkmark-circle" size={36} color={C.success} />
-                </View>
-                <Text style={styles.completedFinalTitle}>Serviço Concluído!</Text>
-                {paymentResult && (
-                  <Text style={styles.completedFinalValue}>
-                    Você recebeu R$ {paymentResult.providerEarning.toFixed(2)}
-                  </Text>
-                )}
-              </View>
-            )}
-          </View>
+          <ServiceBlock service={activeService} />
         )}
-      </ScrollView>
 
-      <Modal
-        visible={showRatingModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowRatingModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Avalie o Cliente</Text>
-            <Text style={styles.modalSubtitle}>
-              Como foi a experiência com este cliente?
-            </Text>
-
-            <StarRating value={rating} onChange={setRating} size={36} />
-
-            {paymentResult && (
-              <View style={styles.modalPaymentBox}>
-                <Text style={styles.modalPaymentLabel}>Você recebeu:</Text>
-                <Text style={styles.modalPaymentValue}>
-                  R$ {paymentResult.providerEarning.toFixed(2)}
-                </Text>
-                <Text style={styles.modalFeeLabel}>
-                  (Taxa plataforma: R$ {paymentResult.fee.toFixed(2)})
-                </Text>
+        {/* Flow guide */}
+        <View style={styles.flowGuide}>
+          <Text style={styles.flowGuideTitle}>Fluxo do Serviço</Text>
+          {[
+            { icon: "globe", label: "Serviço disponível no Global", done: true },
+            { icon: "user-check", label: "Você aceita o serviço", done: !!activeService },
+            { icon: "play", label: "Inicia a execução", done: activeService?.status === "in_progress" || activeService?.status === "completed" || activeService?.status === "rated" },
+            { icon: "check-circle", label: "Finaliza o serviço", done: activeService?.status === "completed" || activeService?.status === "rated" },
+            { icon: "dollar-sign", label: "Cliente confirma e paga", done: activeService?.status === "rated" },
+          ].map((step, i) => (
+            <View key={i} style={styles.flowStep}>
+              <View
+                style={[
+                  styles.flowStepIcon,
+                  step.done && styles.flowStepIconDone,
+                ]}
+              >
+                <Feather
+                  name={step.icon as any}
+                  size={14}
+                  color={step.done ? "#000" : C.textMuted}
+                />
               </View>
-            )}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.modalSubmitButton,
-                rating === 0 && styles.modalSubmitButtonDisabled,
-                pressed && { opacity: 0.85 },
-              ]}
-              onPress={handleSubmitRating}
-              disabled={rating === 0}
-            >
-              <Text style={styles.modalSubmitText}>Enviar Avaliação</Text>
-            </Pressable>
-          </View>
+              <Text
+                style={[
+                  styles.flowStepText,
+                  step.done && { color: C.text },
+                ]}
+              >
+                {step.label}
+              </Text>
+              {step.done && (
+                <Ionicons name="checkmark-circle" size={16} color={C.success} />
+              )}
+            </View>
+          ))}
         </View>
-      </Modal>
+      </ScrollView>
     </View>
   );
 }
@@ -340,7 +412,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 20,
+    paddingBottom: 16,
   },
   headerTitle: {
     fontSize: 28,
@@ -357,7 +429,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginHorizontal: 16,
     gap: 10,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   statCard: {
     flex: 1,
@@ -370,29 +442,31 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: "Inter_700Bold",
     color: C.primary,
+    textAlign: "center",
   },
   statLabel: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
+    textAlign: "center",
   },
   emptyCard: {
     marginHorizontal: 16,
     backgroundColor: C.surface,
     borderRadius: 20,
-    padding: 32,
+    padding: 28,
     alignItems: "center",
     borderWidth: 1,
     borderColor: C.border,
     gap: 14,
   },
   emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
+    width: 76,
+    height: 76,
+    borderRadius: 22,
     backgroundColor: C.backgroundTertiary,
     alignItems: "center",
     justifyContent: "center",
@@ -402,14 +476,14 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: C.text,
   },
-  emptySubtitle: {
+  emptyDesc: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 21,
   },
-  goGlobalButton: {
+  goGlobalBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -418,9 +492,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.primary,
-    marginTop: 6,
+    marginTop: 4,
   },
-  goGlobalButtonText: {
+  goGlobalText: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: C.primary,
@@ -434,61 +508,108 @@ const styles = StyleSheet.create({
     borderColor: C.border,
     gap: 16,
   },
-  activeCardHeader: {
+  statusRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  statusPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    backgroundColor: C.backgroundTertiary,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  statusPillAccepted: {
+    backgroundColor: C.accentLight,
+    borderColor: C.accent,
+  },
+  statusPillInProgress: {
+    backgroundColor: C.primaryGlow,
+    borderColor: C.primary,
+  },
+  statusPillCompleted: {
+    backgroundColor: C.warningLight,
+    borderColor: C.warning,
+  },
+  statusPillRated: {
+    backgroundColor: C.successLight,
+    borderColor: C.success,
   },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: C.primary,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: C.textMuted,
   },
-  statusDotCompleted: {
-    backgroundColor: C.warning,
-  },
-  statusDotRated: {
-    backgroundColor: C.success,
-  },
-  statusLabel: {
+  statusPillText: {
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
     color: C.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
+  },
+  urgentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.dangerLight,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: C.danger,
+  },
+  urgentPillText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: C.danger,
   },
   activeTitle: {
     fontSize: 20,
     fontFamily: "Inter_700Bold",
     color: C.text,
   },
-  activeDescription: {
+  activeDesc: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
     lineHeight: 21,
   },
-  activeMetaGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+  infoGrid: {
+    backgroundColor: C.backgroundTertiary,
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: C.border,
   },
-  activeMeta: {
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  infoRowLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 7,
   },
-  activeMetaText: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
+  infoRowLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
     color: C.textSecondary,
   },
-  valueBox: {
+  infoRowValue: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: C.text,
+    textAlign: "right",
+    flex: 1,
+    marginLeft: 8,
+  },
+  earningsBox: {
     backgroundColor: C.backgroundTertiary,
     borderRadius: 14,
     padding: 16,
@@ -496,54 +617,53 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
-  valueBoxRow: {
+  earningsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  valueBoxLabel: {
+  earningsLabel: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
   },
-  valueBoxAmount: {
+  earningsValue: {
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: C.text,
   },
-  valueBoxTotal: {
+  earningsTotalRow: {
     borderTopWidth: 1,
     borderTopColor: C.border,
     paddingTop: 10,
     marginTop: 2,
   },
-  valueBoxTotalLabel: {
+  earningsTotalLabel: {
     fontSize: 15,
     fontFamily: "Inter_700Bold",
     color: C.text,
   },
-  valueBoxTotalAmount: {
-    fontSize: 20,
+  earningsTotalValue: {
+    fontSize: 22,
     fontFamily: "Inter_700Bold",
     color: C.success,
   },
-  chatButton: {
+  chatBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.primary,
   },
-  chatButtonText: {
-    fontSize: 15,
+  chatBtnText: {
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
     color: C.primary,
   },
-  finalizeButton: {
-    backgroundColor: C.success,
+  actionBtn: {
     borderRadius: 14,
     paddingVertical: 16,
     flexDirection: "row",
@@ -551,131 +671,113 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
-  finalizeButtonText: {
+  actionBtnPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  actionBtnText: {
     fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: "#000",
   },
-  completedActions: {
-    gap: 12,
-  },
-  completedBanner: {
+  awaitingBox: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    alignItems: "flex-start",
+    gap: 12,
     backgroundColor: C.warningLight,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: C.warning,
   },
-  completedBannerText: {
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-    color: C.warning,
-    flex: 1,
-  },
-  confirmPaymentButton: {
-    backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  confirmPaymentText: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-    color: "#000",
-  },
-  completedFinalBox: {
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 16,
-  },
-  completedFinalIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: C.successLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  completedFinalTitle: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-    color: C.success,
-  },
-  completedFinalValue: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: C.textSecondary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 28,
-    gap: 20,
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderColor: C.border,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-  },
-  modalSubtitle: {
+  awaitingTitle: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    textAlign: "center",
+    fontFamily: "Inter_600SemiBold",
+    color: C.warning,
+    marginBottom: 4,
   },
-  modalPaymentBox: {
+  awaitingDesc: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: C.warning,
+    lineHeight: 19,
+    opacity: 0.85,
+  },
+  doneBox: {
     backgroundColor: C.successLight,
     borderRadius: 14,
-    padding: 16,
-    width: "100%",
+    padding: 20,
     alignItems: "center",
-    gap: 4,
+    gap: 8,
     borderWidth: 1,
     borderColor: C.success,
   },
-  modalPaymentLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
+  doneIconWrap: {
+    marginBottom: 4,
   },
-  modalPaymentValue: {
+  doneTitle: {
+    fontSize: 18,
+    fontFamily: "Inter_700Bold",
+    color: C.success,
+  },
+  doneValue: {
     fontSize: 28,
     fontFamily: "Inter_700Bold",
     color: C.success,
   },
-  modalFeeLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: C.textTertiary,
-  },
-  modalSubmitButton: {
-    backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    width: "100%",
+  clientRatingRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    marginTop: 4,
   },
-  modalSubmitButtonDisabled: {
-    opacity: 0.4,
+  clientRatingLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
+    marginRight: 2,
   },
-  modalSubmitText: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: "#000",
+  flowGuide: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    padding: 18,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  flowGuideTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  flowStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  flowStepIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    backgroundColor: C.backgroundTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  flowStepIconDone: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  flowStepText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: C.textMuted,
+    flex: 1,
   },
 });
