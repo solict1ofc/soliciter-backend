@@ -616,7 +616,7 @@ export default function SolicitacoesScreen() {
   const openStripeCheckout = async (serviceId: string, svc: Service): Promise<boolean> => {
     try {
       const amountInCents = Math.round(svc.finalValue * 100);
-      const res = await fetch(`${API_BASE}/api/payment/create-checkout`, {
+      const res = await fetch(`${API_BASE}/payment/create-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -638,11 +638,11 @@ export default function SolicitacoesScreen() {
       }
       await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
 
-      // Poll for payment status after browser closes
-      for (let i = 0; i < 8; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
+      // Poll for payment status — 120s total (60 × 2s) to give user time on Stripe checkout
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
         try {
-          const statusRes = await fetch(`${API_BASE}/api/payment/status/${serviceId}`);
+          const statusRes = await fetch(`${API_BASE}/payment/status/${serviceId}`);
           if (statusRes.ok) {
             const { status } = await statusRes.json();
             if (status === "paid") return true;
