@@ -214,6 +214,15 @@ function ServiceCard({
         </View>
       </View>
 
+      {/* Locked chat — unlocks after acceptance */}
+      <View style={styles.lockedChatRow}>
+        <View style={styles.lockedChatBtn}>
+          <Ionicons name="chatbubble-ellipses-outline" size={15} color={C.textMuted} />
+          <Text style={styles.lockedChatText}>Chat disponível após aceitar</Text>
+          <Ionicons name="lock-closed" size={12} color={C.textMuted} />
+        </View>
+      </View>
+
       <Pressable
         style={({ pressed }) => [
           styles.acceptButton,
@@ -719,6 +728,30 @@ const styles = StyleSheet.create({
   locationCity: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.primary },
   locationNeighborhood: { flexDirection: "row", alignItems: "center", gap: 4, flex: 1 },
   locationNeighborhoodText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.textSecondary },
+
+  // Locked chat bar
+  lockedChatRow: {
+    borderTopWidth: 1,
+    borderTopColor: C.border,
+    paddingTop: 10,
+  },
+  lockedChatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    backgroundColor: C.backgroundTertiary,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  lockedChatText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: C.textMuted,
+  },
 
   acceptButton: {
     backgroundColor: C.primary,

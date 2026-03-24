@@ -325,12 +325,64 @@ function HistoryCard({ service }: { service: Service }) {
   const { provider, PLATFORM_FEE_RATE } = useApp();
   const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
   const earned = service.finalValue - fee;
-  const date = new Date(service.ratedAt ?? service.completedAt ?? service.createdAt);
+  const date = new Date(service.ratedAt ?? service.completedAt ?? service.acceptedAt ?? service.createdAt);
   const dateStr = date.toLocaleDateString("pt-BR", {
     day: "2-digit", month: "short", year: "numeric",
   });
   const isRated = service.status === "rated";
+  const isActive = service.status === "accepted" || service.status === "in_progress";
 
+  // ── Active service card (pinned at top of history) ─────────────────────────
+  if (isActive) {
+    const statusColor = service.status === "in_progress" ? C.primary : C.accent;
+    const statusLabel = service.status === "in_progress" ? "Em andamento" : "Aceito";
+    return (
+      <View style={[styles.historyCard, styles.historyCardActive]}>
+        {/* Active banner */}
+        <View style={styles.historyActiveBanner}>
+          <View style={[styles.historyActiveDot, { backgroundColor: statusColor }]} />
+          <Text style={[styles.historyActiveLabel, { color: statusColor }]}>
+            {statusLabel.toUpperCase()}
+          </Text>
+          <Text style={styles.historyActiveSub}>• Chamado em andamento</Text>
+        </View>
+
+        <View style={styles.historyCardHeader}>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={styles.historyCardTitle} numberOfLines={1}>{service.title}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Ionicons name="location-outline" size={11} color={C.textTertiary} />
+              <Text style={styles.historyCardMeta}>{service.neighborhood}, {service.city}</Text>
+            </View>
+          </View>
+          <View style={[styles.historyEarned, { borderColor: statusColor }]}>
+            <Text style={[styles.historyEarnedValue, { color: statusColor }]}>
+              R$ {earned.toFixed(2)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Chat button */}
+        <Pressable
+          style={({ pressed }) => [styles.chatBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => router.push(`/chat/${service.id}?role=provider` as any)}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <Ionicons name="chatbubble-ellipses-outline" size={17} color={C.primary} />
+            <Text style={styles.chatBtnText}>Chat com o Cliente</Text>
+          </View>
+          {(service.unreadProvider ?? 0) > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{service.unreadProvider}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward-outline" size={14} color={C.textMuted} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  // ── Past service card ──────────────────────────────────────────────────────
   return (
     <View style={styles.historyCard}>
       <View style={styles.historyCardHeader}>
@@ -357,7 +409,7 @@ function HistoryCard({ service }: { service: Service }) {
             color={isRated ? C.success : C.warning}
           />
           <Text style={[styles.historyStatusText, { color: isRated ? C.success : C.warning }]}>
-            {isRated ? "Pago" : "Aguardando"}
+            {isRated ? "Pago" : "Aguardando pgto."}
           </Text>
         </View>
 
@@ -446,15 +498,24 @@ export default function ProviderScreen() {
 
   // Hooks must always run — before any conditional return
   const historyServices = useMemo(() => {
+    const ACTIVE = ["accepted", "in_progress"];
     return [...services]
       .filter((s) =>
-        (s.status === "rated" || s.status === "completed") &&
+        (s.status === "accepted" || s.status === "in_progress" ||
+          s.status === "completed" || s.status === "rated") &&
         (s.providerId === provider.id || s.id === activeService?.id)
       )
-      .sort((a, b) =>
-        new Date(b.ratedAt ?? b.completedAt ?? b.createdAt).getTime() -
-        new Date(a.ratedAt ?? a.completedAt ?? a.createdAt).getTime()
-      );
+      .sort((a, b) => {
+        // Active services always float to top
+        const aActive = ACTIVE.includes(a.status);
+        const bActive = ACTIVE.includes(b.status);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return (
+          new Date(b.ratedAt ?? b.completedAt ?? b.acceptedAt ?? b.createdAt).getTime() -
+          new Date(a.ratedAt ?? a.completedAt ?? a.acceptedAt ?? a.createdAt).getTime()
+        );
+      });
   }, [services, provider.id, activeService?.id]);
 
   const totalEarnedSession = useMemo(() => {
@@ -1208,6 +1269,33 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: C.gold,
     marginLeft: 4,
+  },
+
+  // ── ACTIVE history card ───────────────────────────────────────────────────
+  historyCardActive: {
+    borderColor: C.primary,
+    borderWidth: 1.5,
+  },
+  historyActiveBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  historyActiveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  historyActiveLabel: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: 0.8,
+  },
+  historyActiveSub: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: C.textMuted,
   },
 
   // ── GATE (unregistered provider) ──────────────────────────────────────────
