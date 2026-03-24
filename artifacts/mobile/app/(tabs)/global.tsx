@@ -1,13 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  FlatList,
   Modal,
   Pressable,
   RefreshControl,
+  SectionList,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,6 +21,8 @@ import type { Service } from "@/context/AppContext";
 import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
+
+const USER_CITY = "Goiânia"; // default user city
 
 // ─── Pulsing border for urgent ────────────────────────────────────────────────
 function UrgentBorder() {
@@ -45,14 +46,9 @@ function UrgentBorder() {
 }
 
 // ─── Filter Chip ──────────────────────────────────────────────────────────────
-function FilterChip({
-  label, active, onPress,
-}: { label: string; active: boolean; onPress: () => void }) {
+function FilterChip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable
-      style={[styles.chip, active && styles.chipActive]}
-      onPress={onPress}
-    >
+    <Pressable style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
       <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
         {label}
       </Text>
@@ -95,7 +91,6 @@ function FilterSheet({
           </View>
         </View>
 
-        {/* City section */}
         <Text style={styles.filterSectionLabel}>Cidade</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: "row", gap: 8, paddingRight: 20 }}>
@@ -119,15 +114,10 @@ function FilterSheet({
           </View>
         </ScrollView>
 
-        {/* Neighborhood section (only when city selected) */}
         {selectedCity && neighborhoods.length > 0 && (
           <>
             <Text style={styles.filterSectionLabel}>Bairro em {selectedCity}</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 8 }}
-            >
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
               <View style={{ flexDirection: "row", gap: 8, paddingRight: 20 }}>
                 <FilterChip
                   label="Todos os bairros"
@@ -147,10 +137,7 @@ function FilterSheet({
           </>
         )}
 
-        <Pressable
-          style={({ pressed }) => [styles.applyBtn, pressed && { opacity: 0.85 }]}
-          onPress={onClose}
-        >
+        <Pressable style={({ pressed }) => [styles.applyBtn, pressed && { opacity: 0.85 }]} onPress={onClose}>
           <Text style={styles.applyBtnText}>Aplicar Filtros</Text>
         </Pressable>
       </View>
@@ -159,7 +146,13 @@ function FilterSheet({
 }
 
 // ─── Service Card ─────────────────────────────────────────────────────────────
-function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => void }) {
+function ServiceCard({
+  service, onAccept, userCity,
+}: {
+  service: Service;
+  onAccept: () => void;
+  userCity: string;
+}) {
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -169,17 +162,29 @@ function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => 
     return `${Math.floor(hrs / 24)}d atrás`;
   };
 
+  const isNearby = service.city === userCity;
+
   return (
     <View style={[styles.card, service.urgent && styles.urgentCard]}>
       {service.urgent && <UrgentBorder />}
-      {service.urgent && (
-        <View style={styles.urgentBanner}>
-          <Ionicons name="flash" size={13} color={C.danger} />
-          <Text style={styles.urgentBannerText}>PREÇO COM URGÊNCIA</Text>
-          <Ionicons name="flash" size={13} color={C.danger} />
-        </View>
-      )}
 
+      {/* Top badges row */}
+      <View style={styles.topBadgesRow}>
+        {service.urgent && (
+          <View style={styles.urgentBadge}>
+            <Ionicons name="flash" size={12} color={C.danger} />
+            <Text style={styles.urgentBadgeText}>URGENTE</Text>
+          </View>
+        )}
+        {isNearby && (
+          <View style={styles.nearbyBadge}>
+            <Ionicons name="location" size={12} color={C.success} />
+            <Text style={styles.nearbyBadgeText}>Perto de você</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Title + value */}
       <View style={styles.cardHeader}>
         <View style={styles.cardTitleArea}>
           <Text style={styles.cardTitle} numberOfLines={1}>{service.title}</Text>
@@ -192,16 +197,18 @@ function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => 
         </View>
       </View>
 
-      <Text style={styles.cardDescription} numberOfLines={3}>{service.description}</Text>
+      <Text style={styles.cardDescription} numberOfLines={2}>{service.description}</Text>
 
-      <View style={styles.cardMeta}>
-        <View style={styles.metaTag}>
-          <Ionicons name="location-outline" size={12} color={C.primary} />
-          <Text style={styles.metaTagText}>{service.city}</Text>
+      {/* Location row — always prominent */}
+      <View style={styles.locationRow}>
+        <View style={styles.locationPill}>
+          <Ionicons name="location" size={13} color={C.primary} />
+          <Text style={styles.locationCity}>{service.city}</Text>
         </View>
-        <View style={styles.metaTag}>
-          <Ionicons name="navigate-outline" size={12} color={C.textSecondary} />
-          <Text style={styles.metaTagText}>{service.neighborhood}</Text>
+        <Ionicons name="chevron-forward" size={12} color={C.textMuted} />
+        <View style={styles.locationNeighborhood}>
+          <Ionicons name="navigate" size={12} color={C.textSecondary} />
+          <Text style={styles.locationNeighborhoodText}>{service.neighborhood}</Text>
         </View>
       </View>
 
@@ -232,7 +239,31 @@ function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => 
   );
 }
 
+// ─── Section Header ───────────────────────────────────────────────────────────
+function CityHeader({ title, count, isUserCity }: { title: string; count: number; isUserCity: boolean }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderLeft}>
+        <Ionicons
+          name={isUserCity ? "location" : "globe-outline"}
+          size={15}
+          color={isUserCity ? C.primary : C.textSecondary}
+        />
+        <Text style={[styles.sectionHeaderTitle, isUserCity && { color: C.primary }]}>
+          {isUserCity ? `📍 ${title}` : title}
+        </Text>
+      </View>
+      <View style={styles.sectionBadge}>
+        <Text style={styles.sectionBadgeText}>{count}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
+type Section = { title: string; data: Service[]; isUserCity: boolean };
+type QuickFilter = "nearby" | "all";
+
 export default function GlobalScreen() {
   const insets = useSafeAreaInsets();
   const { availableServices, acceptService, provider } = useApp();
@@ -240,17 +271,55 @@ export default function GlobalScreen() {
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterCity, setFilterCity] = useState("");
   const [filterNeighborhood, setFilterNeighborhood] = useState("");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("nearby");
 
-  const filteredServices = useMemo(() => {
-    let list = availableServices;
+  // Sort: urgent first, then user's city, then by value desc
+  const sortedServices = useMemo(() => {
+    return [...availableServices].sort((a, b) => {
+      if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+      const aLocal = a.city === USER_CITY ? 1 : 0;
+      const bLocal = b.city === USER_CITY ? 1 : 0;
+      if (aLocal !== bLocal) return bLocal - aLocal;
+      return b.finalValue - a.finalValue;
+    });
+  }, [availableServices]);
+
+  // Apply filters (city sheet + quick filter)
+  const afterFilter = useMemo(() => {
+    let list = sortedServices;
+    if (quickFilter === "nearby") list = list.filter((s) => s.city === USER_CITY);
     if (filterCity) list = list.filter((s) => s.city === filterCity);
     if (filterNeighborhood) list = list.filter((s) => s.neighborhood === filterNeighborhood);
-    const urgent = list.filter((s) => s.urgent);
-    const regular = list.filter((s) => !s.urgent);
-    return [...urgent, ...regular];
-  }, [availableServices, filterCity, filterNeighborhood]);
+    return list;
+  }, [sortedServices, quickFilter, filterCity, filterNeighborhood]);
 
-  const hasFilter = !!filterCity || !!filterNeighborhood;
+  // Build sections: user's city first, then other cities
+  const sections = useMemo((): Section[] => {
+    if (filterCity || filterNeighborhood || quickFilter === "nearby") {
+      // Single section when filtered
+      return [{ title: filterCity || USER_CITY, data: afterFilter, isUserCity: true }];
+    }
+    // Group by city
+    const cityMap = new Map<string, Service[]>();
+    afterFilter.forEach((s) => {
+      if (!cityMap.has(s.city)) cityMap.set(s.city, []);
+      cityMap.get(s.city)!.push(s);
+    });
+    const result: Section[] = [];
+    // User's city first
+    if (cityMap.has(USER_CITY)) {
+      result.push({ title: USER_CITY, data: cityMap.get(USER_CITY)!, isUserCity: true });
+      cityMap.delete(USER_CITY);
+    }
+    // Remaining cities
+    for (const [city, services] of cityMap) {
+      result.push({ title: city, data: services, isUserCity: false });
+    }
+    return result;
+  }, [afterFilter, filterCity, filterNeighborhood, quickFilter]);
+
+  const totalCount = sections.reduce((sum, s) => sum + s.data.length, 0);
+  const hasAdvancedFilter = !!filterCity || !!filterNeighborhood;
 
   const handleAccept = async (service: Service) => {
     if (provider.activeServiceId) {
@@ -268,12 +337,6 @@ export default function GlobalScreen() {
     setRefreshing(false);
   };
 
-  const filterLabel = filterCity
-    ? filterNeighborhood
-      ? `${filterNeighborhood}, ${filterCity}`
-      : filterCity
-    : "Todos os locais";
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* ── Header ── */}
@@ -281,7 +344,7 @@ export default function GlobalScreen() {
         <View style={{ gap: 4 }}>
           <SoliciteLogo size="sm" />
           <Text style={styles.headerSubtitle}>
-            {filteredServices.length} serviço{filteredServices.length !== 1 ? "s" : ""} disponível{filteredServices.length !== 1 ? "s" : ""}
+            {totalCount} serviço{totalCount !== 1 ? "s" : ""} disponível{totalCount !== 1 ? "s" : ""}
           </Text>
         </View>
         <View style={styles.headerBadge}>
@@ -290,31 +353,66 @@ export default function GlobalScreen() {
         </View>
       </View>
 
-      {/* ── Filter bar ── */}
-      <Pressable
-        style={({ pressed }) => [styles.filterBar, hasFilter && styles.filterBarActive, pressed && { opacity: 0.85 }]}
-        onPress={() => setFilterVisible(true)}
-      >
-        <Ionicons
-          name="filter"
-          size={16}
-          color={hasFilter ? C.primary : C.textSecondary}
-        />
-        <Text style={[styles.filterBarText, hasFilter && { color: C.primary }]} numberOfLines={1}>
-          {filterLabel}
-        </Text>
-        {hasFilter ? (
+      {/* ── Quick filter row ── */}
+      <View style={styles.quickFilterRow}>
+        <Pressable
+          style={[styles.quickBtn, quickFilter === "nearby" && styles.quickBtnActive]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setQuickFilter("nearby"); setFilterCity(""); setFilterNeighborhood(""); }}
+        >
+          <Ionicons
+            name="location"
+            size={14}
+            color={quickFilter === "nearby" ? "#000" : C.textSecondary}
+          />
+          <Text style={[styles.quickBtnText, quickFilter === "nearby" && styles.quickBtnTextActive]}>
+            Minha cidade
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.quickBtn, quickFilter === "all" && styles.quickBtnActive]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setQuickFilter("all"); setFilterCity(""); setFilterNeighborhood(""); }}
+        >
+          <Ionicons
+            name="globe"
+            size={14}
+            color={quickFilter === "all" ? "#000" : C.textSecondary}
+          />
+          <Text style={[styles.quickBtnText, quickFilter === "all" && styles.quickBtnTextActive]}>
+            Todos os locais
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.quickBtn, hasAdvancedFilter && styles.quickBtnFilter]}
+          onPress={() => setFilterVisible(true)}
+        >
+          <Ionicons
+            name="options"
+            size={14}
+            color={hasAdvancedFilter ? C.primary : C.textSecondary}
+          />
+          {hasAdvancedFilter && (
+            <View style={styles.filterDot} />
+          )}
+        </Pressable>
+      </View>
+
+      {/* Active advanced filter banner */}
+      {hasAdvancedFilter && (
+        <View style={styles.filterBanner}>
+          <Ionicons name="filter" size={14} color={C.primary} />
+          <Text style={styles.filterBannerText} numberOfLines={1}>
+            {filterNeighborhood ? `${filterNeighborhood}, ${filterCity}` : filterCity}
+          </Text>
           <Pressable
-            style={styles.clearFilterBtn}
             hitSlop={10}
             onPress={() => { setFilterCity(""); setFilterNeighborhood(""); }}
           >
             <Ionicons name="close-circle" size={16} color={C.primary} />
           </Pressable>
-        ) : (
-          <Ionicons name="chevron-down" size={16} color={C.textTertiary} />
-        )}
-      </Pressable>
+        </View>
+      )}
 
       {/* ── Provider blocked banner ── */}
       {provider.activeServiceId && (
@@ -326,44 +424,63 @@ export default function GlobalScreen() {
         </View>
       )}
 
-      <FlatList
-        data={filteredServices}
+      {/* ── Sectioned list ── */}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={C.primary} />
         }
+        renderSectionHeader={({ section }) =>
+          sections.length > 1 ? (
+            <CityHeader
+              title={section.title}
+              count={section.data.length}
+              isUserCity={section.isUserCity}
+            />
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <ServiceCard
+            service={item}
+            userCity={USER_CITY}
+            onAccept={() => handleAccept(item)}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+        SectionSeparatorComponent={() => <View style={{ height: 6 }} />}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              {hasFilter ? (
-                <Ionicons name="search" size={40} color={C.textMuted} />
+              {quickFilter === "nearby" ? (
+                <Ionicons name="location-outline" size={40} color={C.textMuted} />
               ) : (
                 <Ionicons name="archive-outline" size={40} color={C.textMuted} />
               )}
             </View>
             <Text style={styles.emptyTitle}>
-              {hasFilter ? "Nenhum serviço nessa região" : "Nenhum serviço disponível"}
+              {quickFilter === "nearby"
+                ? `Nenhum serviço em ${USER_CITY}`
+                : "Nenhum serviço disponível"}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {hasFilter
-                ? "Tente ampliar o filtro ou remover o bairro"
+              {quickFilter === "nearby"
+                ? "Tente buscar em todos os locais ou amplie o filtro"
                 : "Novos serviços aparecerão aqui assim que forem publicados"}
             </Text>
-            {hasFilter && (
+            {quickFilter === "nearby" && (
               <Pressable
                 style={styles.clearFilterBtnLarge}
-                onPress={() => { setFilterCity(""); setFilterNeighborhood(""); }}
+                onPress={() => setQuickFilter("all")}
               >
-                <Text style={styles.clearFilterBtnLargeText}>Limpar Filtro</Text>
+                <Text style={styles.clearFilterBtnLargeText}>Ver todos os locais</Text>
               </Pressable>
             )}
           </View>
         }
-        renderItem={({ item }) => (
-          <ServiceCard service={item} onAccept={() => handleAccept(item)} />
-        )}
       />
 
       <FilterSheet
@@ -389,7 +506,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
   },
-  headerTitle: { fontSize: 28, fontFamily: "Inter_700Bold", color: C.text, marginBottom: 4 },
   headerSubtitle: { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary },
   headerBadge: {
     flexDirection: "row",
@@ -405,31 +521,62 @@ const styles = StyleSheet.create({
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: C.success },
   liveText: { fontSize: 11, fontFamily: "Inter_700Bold", color: C.success, letterSpacing: 1 },
 
-  // Filter bar
-  filterBar: {
+  // Quick filter
+  quickFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    alignItems: "center",
+  },
+  quickBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginHorizontal: 16,
-    marginBottom: 10,
+    gap: 6,
     backgroundColor: C.surface,
-    borderRadius: 14,
+    borderRadius: 20,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 9,
     borderWidth: 1,
     borderColor: C.border,
+    position: "relative",
   },
-  filterBarActive: {
+  quickBtnActive: {
+    backgroundColor: C.primary,
+    borderColor: C.primary,
+  },
+  quickBtnFilter: {
     borderColor: C.primary,
     backgroundColor: C.primaryGlow,
+    paddingHorizontal: 12,
   },
-  filterBarText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: C.textSecondary,
+  quickBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.textSecondary },
+  quickBtnTextActive: { color: "#000" },
+  filterDot: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.primary,
   },
-  clearFilterBtn: { padding: 2 },
+
+  // Active filter banner
+  filterBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: C.primaryGlow,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: C.primary + "60",
+  },
+  filterBannerText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium", color: C.primary },
 
   // Blocked banner
   blockedBanner: {
@@ -447,6 +594,27 @@ const styles = StyleSheet.create({
   },
   blockedBannerText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.warning, flex: 1 },
 
+  // Section header
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 2,
+    marginBottom: 4,
+  },
+  sectionHeaderLeft: { flexDirection: "row", alignItems: "center", gap: 7 },
+  sectionHeaderTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.textSecondary, letterSpacing: 0.3 },
+  sectionBadge: {
+    backgroundColor: C.surface,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  sectionBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold", color: C.textSecondary },
+
   // Cards
   card: {
     backgroundColor: C.surface,
@@ -454,23 +622,41 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: C.border,
-    gap: 14,
+    gap: 12,
     overflow: "hidden",
   },
   urgentCard: { borderColor: C.urgentBorder, backgroundColor: "rgba(255, 59, 92, 0.05)" },
   urgentBorderAnim: { borderRadius: 18, borderWidth: 2, borderColor: C.urgentBorder },
-  urgentBanner: {
+
+  // Top badges row
+  topBadgesRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  urgentBadge: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+    gap: 5,
     backgroundColor: C.dangerLight,
     borderRadius: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: C.danger,
   },
-  urgentBannerText: { fontSize: 11, fontFamily: "Inter_700Bold", color: C.danger, letterSpacing: 1.5 },
+  urgentBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: C.danger, letterSpacing: 1.2 },
+  nearbyBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: C.successLight,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: C.success,
+  },
+  nearbyBadgeText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: C.success },
+
   cardHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
-  cardTitleArea: { flex: 1, gap: 4 },
+  cardTitleArea: { flex: 1, gap: 3 },
   cardTitle: { fontSize: 17, fontFamily: "Inter_700Bold", color: C.text },
   cardTime: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textTertiary },
   valueBadge: {
@@ -484,18 +670,25 @@ const styles = StyleSheet.create({
   valueBadgeUrgent: { backgroundColor: C.dangerLight, borderColor: C.danger },
   valueBadgeText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.primary },
   valueBadgeTextUrgent: { color: C.danger },
-  cardDescription: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 21 },
-  cardMeta: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
-  metaTag: {
+  cardDescription: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 20 },
+
+  // Location row (prominent)
+  locationRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
     backgroundColor: C.backgroundTertiary,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: C.border,
   },
-  metaTagText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.textSecondary },
+  locationPill: { flexDirection: "row", alignItems: "center", gap: 5 },
+  locationCity: { fontSize: 13, fontFamily: "Inter_700Bold", color: C.primary },
+  locationNeighborhood: { flexDirection: "row", alignItems: "center", gap: 4, flex: 1 },
+  locationNeighborhoodText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.textSecondary },
+
   acceptButton: {
     backgroundColor: C.primary,
     borderRadius: 14,
@@ -514,101 +707,55 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: { alignItems: "center", paddingVertical: 60, gap: 16 },
   emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: C.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: C.border,
+    width: 80, height: 80, borderRadius: 24,
+    backgroundColor: C.surface, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
   },
   emptyTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: C.text },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-    textAlign: "center",
-    lineHeight: 21,
-    paddingHorizontal: 32,
+    fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary,
+    textAlign: "center", lineHeight: 21, paddingHorizontal: 32,
   },
   clearFilterBtnLarge: {
-    marginTop: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: C.primary,
+    marginTop: 8, paddingHorizontal: 24, paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1, borderColor: C.primary,
   },
-  clearFilterBtnLargeText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: C.primary,
-  },
+  clearFilterBtnLargeText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.primary },
 
   // Filter modal
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
   filterSheet: {
-    backgroundColor: C.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderColor: C.border,
+    backgroundColor: C.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderColor: C.border,
   },
   sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: C.border,
-    alignSelf: "center",
-    marginBottom: 16,
+    width: 40, height: 4, borderRadius: 2, backgroundColor: C.border,
+    alignSelf: "center", marginBottom: 16,
   },
   sheetHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 18,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18,
   },
   sheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: C.text },
   clearBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: C.dangerLight,
-    borderWidth: 1,
-    borderColor: C.danger,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+    backgroundColor: C.dangerLight, borderWidth: 1, borderColor: C.danger,
   },
   clearBtnText: { fontSize: 13, fontFamily: "Inter_600SemiBold", color: C.danger },
   filterSectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_700Bold",
-    color: C.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 10,
+    fontSize: 11, fontFamily: "Inter_700Bold", color: C.textTertiary,
+    textTransform: "uppercase", letterSpacing: 1, marginBottom: 10,
   },
   chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: C.backgroundTertiary,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: C.border,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: C.backgroundTertiary, borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: C.border,
   },
   chipActive: { backgroundColor: C.primary, borderColor: C.primary },
   chipText: { fontSize: 13, fontFamily: "Inter_500Medium", color: C.textSecondary, maxWidth: 160 },
   chipTextActive: { color: "#000", fontFamily: "Inter_700Bold" },
   applyBtn: {
-    backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginTop: 16,
+    backgroundColor: C.primary, borderRadius: 14, paddingVertical: 16,
+    alignItems: "center", marginTop: 16,
   },
   applyBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#000" },
 });

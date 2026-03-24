@@ -19,6 +19,7 @@ export type Service = {
   city: string;
   neighborhood: string;
   urgent: boolean;
+  priority: boolean;
   status: ServiceStatus;
   createdAt: string;
   acceptedAt?: string;
@@ -41,7 +42,7 @@ export type ChatMessage = {
   timestamp: string;
 };
 
-export type ProviderPlan = "free" | "basic" | "premium";
+export type ProviderPlan = "free" | "basic" | "destaque" | "premium";
 
 export type ProviderProfile = {
   id: string;
@@ -126,6 +127,7 @@ function useAppContextValue() {
         city: data.city,
         neighborhood: data.neighborhood,
         urgent: data.urgent,
+        priority: data.urgent,
         status: "pending_payment",
         createdAt: new Date().toISOString(),
         chatMessages: [],

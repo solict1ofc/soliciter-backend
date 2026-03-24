@@ -40,15 +40,19 @@ function StarDisplay({ rating, size = 16 }: { rating: number; size?: number }) {
   );
 }
 
+const PROMO_ENDS = "31/03/2026";
+
 type PlanConfig = {
   key: ProviderPlan;
   name: string;
   price: number;
+  promoPrice?: number;
   color: string;
   bgColor: string;
   borderColor: string;
   benefits: string[];
   badge?: string;
+  promoBadge?: string;
 };
 
 const plans: PlanConfig[] = [
@@ -56,31 +60,53 @@ const plans: PlanConfig[] = [
     key: "basic",
     name: "Plano Básico",
     price: 80,
+    promoPrice: 59,
     color: C.primary,
     bgColor: C.primaryGlow,
     borderColor: C.primary,
+    promoBadge: "PROMOÇÃO",
     benefits: [
       "Sem taxa de 10% da plataforma",
-      "Serviços ilimitados",
+      "Serviços ilimitados no Global",
       "Suporte prioritário",
-      "Perfil verificado",
+      "Perfil verificado ✓",
+    ],
+  },
+  {
+    key: "destaque",
+    name: "Plano Destaque",
+    price: 99,
+    promoPrice: 79,
+    color: C.accent,
+    bgColor: C.accentLight,
+    borderColor: C.accent,
+    badge: "MAIS POPULAR",
+    promoBadge: "PROMOÇÃO",
+    benefits: [
+      "Sem taxa de 10% da plataforma",
+      "Perfil em destaque no Global",
+      "Badge 'Destaque' visível aos clientes",
+      "Prioridade de exibição nas buscas",
+      "Relatórios mensais de desempenho",
     ],
   },
   {
     key: "premium",
     name: "Plano Premium",
     price: 120,
+    promoPrice: 99,
     color: C.gold,
     bgColor: "rgba(255, 215, 0, 0.12)",
     borderColor: C.gold,
-    badge: "MAIS VANTAGENS",
+    badge: "MÁXIMAS VANTAGENS",
+    promoBadge: "PROMOÇÃO",
     benefits: [
       "Sem taxa de 10% da plataforma",
-      "Perfil em destaque no Global",
-      "Badge premium no perfil",
-      "Prioridade de exibição",
-      "Relatórios de desempenho",
-      "Suporte 24/7",
+      "Perfil premium destacado no topo",
+      "Badge premium exclusivo no perfil",
+      "Máxima prioridade de exibição",
+      "Relatórios avançados em tempo real",
+      "Suporte VIP 24/7",
     ],
   },
 ];
@@ -128,6 +154,8 @@ export default function ProfileScreen() {
       ? "Gratuito"
       : provider.plan === "basic"
       ? "Básico"
+      : provider.plan === "destaque"
+      ? "Destaque"
       : "Premium";
 
   const planExpiry = provider.planExpiresAt
@@ -174,6 +202,9 @@ export default function ProfileScreen() {
             {provider.plan === "premium" && (
               <Ionicons name="diamond" size={13} color={C.gold} />
             )}
+            {provider.plan === "destaque" && (
+              <Ionicons name="star" size={13} color={C.accent} />
+            )}
             {provider.plan === "basic" && (
               <Ionicons name="star" size={13} color={C.primary} />
             )}
@@ -184,6 +215,7 @@ export default function ProfileScreen() {
               style={[
                 styles.planBadgeText,
                 provider.plan === "premium" && { color: C.gold },
+                provider.plan === "destaque" && { color: C.accent },
                 provider.plan === "basic" && { color: C.primary },
               ]}
             >
@@ -194,11 +226,21 @@ export default function ProfileScreen() {
             )}
           </View>
 
-          {provider.plan === "premium" && (
-            <View style={styles.premiumHighlight}>
-              <Ionicons name="diamond-outline" size={16} color={C.gold} />
-              <Text style={styles.premiumHighlightText}>
-                Prestador Premium em Destaque
+          {(provider.plan === "premium" || provider.plan === "destaque") && (
+            <View style={[
+              styles.premiumHighlight,
+              provider.plan === "destaque" && { borderColor: C.accent, backgroundColor: C.accentLight },
+            ]}>
+              <Ionicons
+                name={provider.plan === "premium" ? "diamond-outline" : "star-outline"}
+                size={16}
+                color={provider.plan === "premium" ? C.gold : C.accent}
+              />
+              <Text style={[
+                styles.premiumHighlightText,
+                provider.plan === "destaque" && { color: C.accent },
+              ]}>
+                {provider.plan === "premium" ? "Prestador Premium em Destaque" : "Prestador em Destaque"}
               </Text>
             </View>
           )}
@@ -259,8 +301,23 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
+        {/* Promotion banner */}
+        <View style={styles.promoBanner}>
+          <View style={styles.promoBannerLeft}>
+            <Ionicons name="flash" size={18} color={C.warning} />
+            <View>
+              <Text style={styles.promoBannerTitle}>Promoção por tempo limitado!</Text>
+              <Text style={styles.promoBannerSub}>Preços especiais até {PROMO_ENDS}</Text>
+            </View>
+          </View>
+          <View style={styles.promoBannerTag}>
+            <Text style={styles.promoBannerTagText}>ATÉ 25% OFF</Text>
+          </View>
+        </View>
+
         {plans.map((plan) => {
           const isActive = provider.plan === plan.key;
+          const displayPrice = plan.promoPrice ?? plan.price;
           return (
             <Pressable
               key={plan.key}
@@ -271,20 +328,32 @@ export default function ProfileScreen() {
               ]}
               onPress={() => !isActive && setSelectedPlan(plan)}
             >
-              {plan.badge && (
-                <View style={[styles.planCardBadge, { backgroundColor: plan.bgColor, borderColor: plan.borderColor }]}>
-                  <Text style={[styles.planCardBadgeText, { color: plan.color }]}>
-                    {plan.badge}
-                  </Text>
-                </View>
-              )}
+              {/* Badges row */}
+              <View style={styles.planBadgesRow}>
+                {plan.badge && (
+                  <View style={[styles.planCardBadge, { backgroundColor: plan.bgColor, borderColor: plan.borderColor }]}>
+                    <Text style={[styles.planCardBadgeText, { color: plan.color }]}>
+                      {plan.badge}
+                    </Text>
+                  </View>
+                )}
+                {plan.promoBadge && (
+                  <View style={styles.planPromoBadge}>
+                    <Ionicons name="flash" size={10} color={C.warning} />
+                    <Text style={styles.planPromoBadgeText}>{plan.promoBadge}</Text>
+                  </View>
+                )}
+              </View>
 
               <View style={styles.planCardHeader}>
-                <View>
+                <View style={{ gap: 2 }}>
                   <Text style={styles.planCardName}>{plan.name}</Text>
                   <View style={styles.planCardPriceRow}>
+                    {plan.promoPrice && (
+                      <Text style={styles.planOriginalPrice}>R$ {plan.price}</Text>
+                    )}
                     <Text style={[styles.planCardPrice, { color: plan.color }]}>
-                      R$ {plan.price}
+                      R$ {displayPrice}
                     </Text>
                     <Text style={styles.planCardPeriod}>/mês</Text>
                   </View>
@@ -686,6 +755,33 @@ const styles = StyleSheet.create({
     gap: 16,
     overflow: "hidden",
   },
+  // Promotion banner
+  promoBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.warningLight,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: C.warning,
+    gap: 12,
+    marginHorizontal: 16,
+  },
+  promoBannerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  promoBannerTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.warning },
+  promoBannerSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.warning, opacity: 0.8 },
+  promoBannerTag: {
+    backgroundColor: C.warning,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  promoBannerTagText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#000" },
+
+  // Plan badges row
+  planBadgesRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   planCardBadge: {
     alignSelf: "flex-start",
     borderRadius: 8,
@@ -697,6 +793,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_700Bold",
     letterSpacing: 1.2,
+  },
+  planPromoBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.warningLight,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: C.warning,
+  },
+  planPromoBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", color: C.warning, letterSpacing: 1 },
+  planOriginalPrice: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: C.textMuted,
+    textDecorationLine: "line-through",
   },
   planCardHeader: {
     flexDirection: "row",
