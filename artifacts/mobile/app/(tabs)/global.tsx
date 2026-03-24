@@ -106,7 +106,7 @@ function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => 
       >
         <View style={styles.acceptButtonInner}>
           <Ionicons
-            name={service.urgent ? "flash-circle" : "checkmark-circle-outline"}
+            name={service.urgent ? "flash" : "checkmark-circle-outline"}
             size={22}
             color="#000"
           />

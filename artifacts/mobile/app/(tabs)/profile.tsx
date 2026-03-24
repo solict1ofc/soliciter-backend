@@ -2,12 +2,14 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -82,11 +84,19 @@ const plans: PlanConfig[] = [
   },
 ];
 
+type WithdrawMethod = "pix" | "bank";
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { provider, subscribePlan } = useApp();
   const [selectedPlan, setSelectedPlan] = useState<PlanConfig | null>(null);
   const [subscribing, setSubscribing] = useState(false);
+  const [withdrawModal, setWithdrawModal] = useState(false);
+  const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod>("pix");
+  const [pixKey, setPixKey] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawSuccess, setWithdrawSuccess] = useState(false);
 
   const handleSubscribe = async (plan: PlanConfig) => {
     Alert.alert(
@@ -199,11 +209,40 @@ export default function ProfileScreen() {
             <Text style={styles.statsGridLabel}>Trabalhos concluídos</Text>
           </View>
           <View style={styles.statsGridCard}>
-            <Ionicons name="wallet-outline" size={24} color={C.success} />
-            <Text style={[styles.statsGridValue, { color: C.success }]}>
-              R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 0 })}
+            <Ionicons name="star" size={24} color={C.gold} />
+            <Text style={[styles.statsGridValue, { color: C.gold }]}>
+              {provider.rating} ⭐
             </Text>
-            <Text style={styles.statsGridLabel}>Total ganho</Text>
+            <Text style={styles.statsGridLabel}>Avaliação média</Text>
+          </View>
+        </View>
+
+        {/* ── CARTEIRA / SAQUE ── */}
+        <View style={styles.walletCard}>
+          <View style={styles.walletHeader}>
+            <View style={styles.walletIconWrap}>
+              <Ionicons name="wallet" size={24} color={C.success} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.walletLabel}>Saldo Disponível</Text>
+              <Text style={styles.walletBalance}>
+                R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [styles.withdrawBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setWithdrawSuccess(false); setWithdrawModal(true); }}
+              disabled={provider.earnings <= 0}
+            >
+              <Ionicons name="arrow-up-circle-outline" size={18} color="#000" />
+              <Text style={styles.withdrawBtnText}>Sacar</Text>
+            </Pressable>
+          </View>
+          <View style={styles.walletInfoRow}>
+            <Ionicons name="information-circle-outline" size={14} color={C.textTertiary} />
+            <Text style={styles.walletInfoText}>
+              Saque via PIX em até 1 dia útil. Mínimo R$ 10,00.
+            </Text>
           </View>
         </View>
 
@@ -279,6 +318,144 @@ export default function ProfileScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* ── MODAL DE SAQUE ── */}
+      <Modal
+        visible={withdrawModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { if (!withdrawing) setWithdrawModal(false); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {withdrawSuccess ? (
+              <View style={{ alignItems: "center", gap: 16 }}>
+                <View style={[styles.withdrawSuccessIcon, { backgroundColor: C.successLight, borderColor: C.success }]}>
+                  <Ionicons name="checkmark-circle" size={64} color={C.success} />
+                </View>
+                <Text style={[styles.modalTitle, { textAlign: "center" }]}>Saque Solicitado!</Text>
+                <Text style={[styles.planModalSubtitle, { textAlign: "center" }]}>
+                  O valor será creditado em até 1 dia útil na sua chave PIX.
+                </Text>
+                <View style={styles.withdrawSuccessBox}>
+                  <Text style={styles.withdrawSuccessLabel}>Valor solicitado</Text>
+                  <Text style={styles.withdrawSuccessValue}>
+                    R$ {parseFloat(withdrawAmount.replace(",", ".") || "0").toFixed(2)}
+                  </Text>
+                  <Text style={styles.withdrawSuccessKey}>→ PIX: {pixKey}</Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.subscribeCta, { backgroundColor: C.primary }, pressed && { opacity: 0.85 }]}
+                  onPress={() => setWithdrawModal(false)}
+                >
+                  <Text style={[styles.subscribeCtaText, { color: "#000" }]}>Fechar</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Solicitar Saque</Text>
+                  <Pressable onPress={() => setWithdrawModal(false)} style={styles.modalClose} hitSlop={12}>
+                    <Feather name="x" size={20} color={C.textSecondary} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.walletBalanceMini}>
+                  <Text style={styles.walletBalanceMiniLabel}>Saldo disponível</Text>
+                  <Text style={styles.walletBalanceMiniValue}>
+                    R$ {provider.earnings.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </Text>
+                </View>
+
+                {/* Method */}
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.inputLabel}>Forma de Saque</Text>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    {([
+                      { id: "pix" as const, label: "PIX", icon: "flash" as const },
+                      { id: "bank" as const, label: "Conta Bancária", icon: "business-outline" as const },
+                    ]).map((m) => (
+                      <Pressable
+                        key={m.id}
+                        style={[styles.methodCard, withdrawMethod === m.id && styles.methodCardActive]}
+                        onPress={() => setWithdrawMethod(m.id)}
+                      >
+                        <Ionicons name={m.icon} size={20} color={withdrawMethod === m.id ? C.primary : C.textSecondary} />
+                        <Text style={[styles.methodCardLabel, withdrawMethod === m.id && { color: C.primary }]}>{m.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Key */}
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.inputLabel}>
+                    {withdrawMethod === "pix" ? "Chave PIX (CPF, e-mail ou telefone)" : "Dados Bancários"}
+                  </Text>
+                  <TextInput
+                    style={styles.withdrawInput}
+                    placeholder={withdrawMethod === "pix" ? "Ex: 000.000.000-00" : "Banco • Agência • Conta"}
+                    placeholderTextColor={C.textMuted}
+                    value={pixKey}
+                    onChangeText={setPixKey}
+                    autoCapitalize="none"
+                    keyboardType={withdrawMethod === "pix" ? "email-address" : "default"}
+                  />
+                </View>
+
+                {/* Amount */}
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.inputLabel}>Valor a Sacar (R$)</Text>
+                  <TextInput
+                    style={styles.withdrawInput}
+                    placeholder="0,00"
+                    placeholderTextColor={C.textMuted}
+                    value={withdrawAmount}
+                    onChangeText={setWithdrawAmount}
+                    keyboardType="numeric"
+                  />
+                  <Text style={styles.withdrawHint}>Mínimo R$ 10,00 · Máximo R$ {provider.earnings.toFixed(2)}</Text>
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.subscribeCta,
+                    { backgroundColor: C.success },
+                    (!pixKey.trim() || !withdrawAmount.trim()) && { opacity: 0.4 },
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  disabled={!pixKey.trim() || !withdrawAmount.trim() || withdrawing}
+                  onPress={async () => {
+                    const amt = parseFloat(withdrawAmount.replace(",", "."));
+                    if (isNaN(amt) || amt < 10) {
+                      Alert.alert("Valor inválido", "O valor mínimo para saque é R$ 10,00.");
+                      return;
+                    }
+                    if (amt > provider.earnings) {
+                      Alert.alert("Saldo insuficiente", "O valor solicitado é maior que seu saldo.");
+                      return;
+                    }
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                    setWithdrawing(true);
+                    await new Promise((r) => setTimeout(r, 2000));
+                    setWithdrawing(false);
+                    setWithdrawSuccess(true);
+                  }}
+                >
+                  {withdrawing ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <>
+                      <Ionicons name="arrow-up-circle-outline" size={20} color="#000" />
+                      <Text style={[styles.subscribeCtaText, { color: "#000" }]}>Solicitar Saque</Text>
+                    </>
+                  )}
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={selectedPlan !== null}
@@ -643,5 +820,189 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: "#000",
+  },
+  planModalSubtitle: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
+    lineHeight: 22,
+  },
+  subscribeCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 16,
+    paddingVertical: 16,
+    width: "100%",
+  },
+  subscribeCtaText: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+  },
+  // WALLET
+  walletCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 20,
+    backgroundColor: C.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: C.success + "60",
+    padding: 18,
+    gap: 14,
+  },
+  walletHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  walletIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: C.successLight,
+    borderWidth: 1,
+    borderColor: C.success,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  walletLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
+    marginBottom: 2,
+  },
+  walletBalance: {
+    fontSize: 26,
+    fontFamily: "Inter_700Bold",
+    color: C.success,
+  },
+  withdrawBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: C.success,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  withdrawBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: "#000",
+  },
+  walletInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  walletInfoText: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.textTertiary,
+    flex: 1,
+  },
+  // WITHDRAW MODAL
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  walletBalanceMini: {
+    backgroundColor: C.successLight,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: C.success + "50",
+    alignItems: "center",
+    gap: 4,
+  },
+  walletBalanceMiniLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.success,
+  },
+  walletBalanceMiniValue: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    color: C.success,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  methodCard: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: C.backgroundTertiary,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  methodCardActive: {
+    borderColor: C.primary,
+    backgroundColor: C.primaryGlow,
+  },
+  methodCardLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: C.textSecondary,
+    flex: 1,
+  },
+  withdrawInput: {
+    backgroundColor: C.backgroundTertiary,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+    color: C.text,
+  },
+  withdrawHint: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: C.textMuted,
+    textAlign: "center",
+  },
+  withdrawSuccessIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  withdrawSuccessBox: {
+    backgroundColor: C.successLight,
+    borderWidth: 1,
+    borderColor: C.success,
+    borderRadius: 14,
+    padding: 16,
+    width: "100%",
+    gap: 4,
+    alignItems: "center",
+  },
+  withdrawSuccessLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.success,
+  },
+  withdrawSuccessValue: {
+    fontSize: 28,
+    fontFamily: "Inter_700Bold",
+    color: C.success,
+  },
+  withdrawSuccessKey: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: C.textSecondary,
   },
 });
