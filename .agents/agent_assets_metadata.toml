@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "aekO3ZACG-tXX9DVaklPC"
+uri = "file://solicite-qrcode.png"
+type = "image"
+title = "QR Code — Expo Go (SOLICITE)"
