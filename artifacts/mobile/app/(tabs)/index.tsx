@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { Service, ServiceStatus } from "@/context/AppContext";
+import LocationPicker from "@/components/LocationPicker";
 
 const C = Colors.dark;
 
@@ -528,7 +529,7 @@ export default function SolicitacoesScreen() {
   const [title, setTitle]           = useState("");
   const [description, setDescription] = useState("");
   const [value, setValue]           = useState("");
-  const [city]                      = useState("Goiânia");
+  const [city, setCity]             = useState("Goiânia");
   const [neighborhood, setNeighborhood] = useState("");
   const [urgent, setUrgent]         = useState(false);
   const [creating, setCreating]     = useState(false);
@@ -552,8 +553,12 @@ export default function SolicitacoesScreen() {
   ).length;
 
   const handleCreate = async () => {
-    if (!title.trim() || !description.trim() || !value.trim() || !neighborhood.trim()) {
-      Alert.alert("Campos obrigatórios", "Preencha todos os campos antes de continuar.");
+    if (!title.trim() || !description.trim() || !value.trim()) {
+      Alert.alert("Campos obrigatórios", "Preencha título, descrição e valor.");
+      return;
+    }
+    if (!city.trim() || !neighborhood.trim()) {
+      Alert.alert("Localização obrigatória", "Selecione a cidade e o bairro antes de continuar.");
       return;
     }
     if (numericValue <= 0) {
@@ -602,7 +607,8 @@ export default function SolicitacoesScreen() {
   };
 
   const handleReset = () => {
-    setTitle(""); setDescription(""); setValue(""); setNeighborhood("");
+    setTitle(""); setDescription(""); setValue("");
+    setCity("Goiânia"); setNeighborhood("");
     setUrgent(false); setPendingId(null); setFormStep("form");
   };
 
@@ -662,20 +668,12 @@ export default function SolicitacoesScreen() {
                 <InputField label="Descrição" placeholder="Descreva os detalhes do serviço..." value={description} onChangeText={setDescription} icon="align-left" multiline numberOfLines={4} />
                 <InputField label="Valor (R$)" placeholder="0,00" value={value} onChangeText={setValue} icon="dollar-sign" keyboardType="numeric" />
 
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  <View style={[styles.inputWrapper, { flex: 1 }]}>
-                    <View style={styles.inputHeader}>
-                      <Feather name="map-pin" size={13} color={C.textTertiary} />
-                      <Text style={styles.inputLabel}>Cidade</Text>
-                    </View>
-                    <View style={[styles.input, { justifyContent: "center", opacity: 0.5 }]}>
-                      <Text style={{ color: C.textSecondary, fontFamily: "Inter_400Regular", fontSize: 15 }}>{city}</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.inputWrapper, { flex: 1 }]}>
-                    <InputField label="Bairro" placeholder="Seu bairro" value={neighborhood} onChangeText={setNeighborhood} icon="navigation" />
-                  </View>
-                </View>
+                <LocationPicker
+                  city={city}
+                  neighborhood={neighborhood}
+                  onCityChange={setCity}
+                  onNeighborhoodChange={setNeighborhood}
+                />
 
                 {/* Urgent toggle */}
                 <Pressable
