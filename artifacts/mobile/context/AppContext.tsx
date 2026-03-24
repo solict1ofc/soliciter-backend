@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import React, { useCallback, useEffect, useState } from "react";
-
+import { Alert } from "react-native";
 import { useAuth } from "@/context/AuthContext";
+
+const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
 export type ServiceStatus =
   | "pending_payment"
@@ -223,16 +225,33 @@ function useAppContextValue() {
   // ─── 4. Prestador inicia → in_progress ────────────────────────────────────
   const startService = useCallback(
     async (serviceId: string) => {
+      const snapshot = [...services];
+      const startedAt = new Date().toISOString();
       const updated = services.map((s) =>
         s.id === serviceId
           ? {
               ...s,
               status: "in_progress" as ServiceStatus,
-              startedAt: new Date().toISOString(),
+              startedAt,
             }
           : s
       );
       await saveServices(updated);
+
+      try {
+        const res = await fetch(`${API_BASE}/iniciar-servico`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serviceId }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? `Erro ${res.status}`);
+        }
+      } catch (err: any) {
+        await saveServices(snapshot);
+        Alert.alert("Erro ao iniciar serviço", err.message ?? "Tente novamente.");
+      }
     },
     [services, saveServices]
   );
@@ -337,10 +356,29 @@ function useAppContextValue() {
   );
 
   const subscribePlan = useCallback(
-    async (plan: ProviderPlan) => {
-      const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
-      await saveProvider({ ...provider, plan, planExpiresAt: expiresAt.toISOString() });
+    async (plan: ProviderPlan): Promise<string | null> => {
+      try {
+        const res = await fetch(`${API_BASE}/criar-assinatura`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? `Erro ${res.status}`);
+        }
+        const { url } = await res.json();
+        if (!url) throw new Error("URL de checkout inválida");
+
+        const expiresAt = new Date();
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+        await saveProvider({ ...provider, plan, planExpiresAt: expiresAt.toISOString() });
+
+        return url as string;
+      } catch (err: any) {
+        Alert.alert("Erro na assinatura", err.message ?? "Tente novamente.");
+        return null;
+      }
     },
     [provider, saveProvider]
   );

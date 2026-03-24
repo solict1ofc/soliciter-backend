@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -144,7 +145,7 @@ export default function ProfileScreen() {
   const handleSubscribe = async (plan: PlanConfig) => {
     Alert.alert(
       `Assinar ${plan.name}`,
-      `R$ ${plan.price},00/mês\n\nDeseja continuar?`,
+      `R$ ${plan.price},00/mês\n\nVocê será redirecionado para o checkout seguro do Stripe.`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -153,10 +154,15 @@ export default function ProfileScreen() {
           onPress: async () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setSubscribing(true);
-            await new Promise((r) => setTimeout(r, 1000));
-            await subscribePlan(plan.key);
-            setSubscribing(false);
-            setSelectedPlan(null);
+            try {
+              const url = await subscribePlan(plan.key);
+              if (url) {
+                await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
+              }
+            } finally {
+              setSubscribing(false);
+              setSelectedPlan(null);
+            }
           },
         },
       ]

@@ -122,6 +122,28 @@ End-to-end Stripe Checkout payment flow for the SOLICITE app:
 - **Platform fee**: 10% only for "free" plan providers; waived for basic/destaque/premium
 - **Escrow model**: client pays upfront, funds held in platform until service completion
 
+### Subscription Payment (Plano Assinatura)
+
+Stripe Checkout subscription flow for provider plans:
+
+- **Backend** (`artifacts/api-server/src/routes/service.ts`):
+  - `POST /api/criar-assinatura` — receives `{ plan }` (basic/destaque/premium), creates Stripe Checkout Session with `mode: "subscription"` and `recurring: { interval: "month" }`, returns `{ url }`
+  - `GET /api/assinatura/sucesso` — success redirect page after Stripe payment
+  - `GET /api/assinatura/cancelado` — cancel redirect page
+  - Plan prices: basic R$80, destaque R$99, premium R$120 (in cents: 8000, 9900, 12000)
+- **Mobile flow** (`artifacts/mobile/app/(tabs)/profile.tsx`):
+  1. Provider selects a plan → confirmation alert
+  2. `subscribePlan(plan)` calls `POST /api/criar-assinatura` → gets checkout URL
+  3. Opens Stripe Checkout in browser via `expo-web-browser`
+  4. On success, local provider state updated with plan + 1-month expiry
+  5. On API error, Alert shown and local state unchanged
+
+### Service Status Tracking
+
+- **DB table**: `services` (`service_id`, `status`, `started_at`, `updated_at`)
+- **Backend**: `POST /api/iniciar-servico` — receives `{ serviceId }`, upserts status to `em_andamento`
+- **Mobile**: `startService()` in `AppContext.tsx` optimistically updates local state, calls API, reverts on failure
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
