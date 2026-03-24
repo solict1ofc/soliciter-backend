@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { ProviderPlan } from "@/context/AppContext";
+import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
 
@@ -135,6 +136,11 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* ── App header bar ── */}
+      <View style={styles.topBar}>
+        <SoliciteLogo size="sm" />
+      </View>
+
       <ScrollView
         contentContainerStyle={{ paddingBottom: 120 }}
         contentInsetAdjustmentBehavior="automatic"
@@ -516,6 +522,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: C.background,
+  },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
   },
   profileCard: {
     margin: 16,

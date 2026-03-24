@@ -21,6 +21,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { Service, ServiceStatus } from "@/context/AppContext";
 import LocationPicker from "@/components/LocationPicker";
+import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
 
@@ -644,7 +645,7 @@ export default function SolicitacoesScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Solicitações</Text>
+          <SoliciteLogo size="sm" />
           <Text style={styles.headerSub}>Crie e acompanhe seus serviços</Text>
         </View>
 

@@ -12,10 +12,10 @@ const C = Colors.dark;
 type IoniconsName = keyof typeof Ionicons.glyphMap;
 
 const TAB_ICONS: Record<string, { default: IoniconsName; focused: IoniconsName }> = {
-  index:    { default: "add-circle-outline",  focused: "add-circle" },
-  global:   { default: "globe-outline",       focused: "globe" },
-  provider: { default: "briefcase-outline",   focused: "briefcase" },
-  profile:  { default: "person-outline",      focused: "person" },
+  index:    { default: "add-circle",  focused: "add-circle" },
+  global:   { default: "globe",       focused: "globe" },
+  provider: { default: "briefcase",   focused: "briefcase" },
+  profile:  { default: "person",      focused: "person" },
 };
 
 export default function TabLayout() {

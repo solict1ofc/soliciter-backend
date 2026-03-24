@@ -19,6 +19,7 @@ import Colors from "@/constants/colors";
 import { ALL_CITY_NAMES, getNeighborhoods } from "@/constants/locations";
 import { useApp } from "@/context/AppContext";
 import type { Service } from "@/context/AppContext";
+import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
 
@@ -277,8 +278,8 @@ export default function GlobalScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* ── Header ── */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Mercado Global</Text>
+        <View style={{ gap: 4 }}>
+          <SoliciteLogo size="sm" />
           <Text style={styles.headerSubtitle}>
             {filteredServices.length} serviço{filteredServices.length !== 1 ? "s" : ""} disponível{filteredServices.length !== 1 ? "s" : ""}
           </Text>

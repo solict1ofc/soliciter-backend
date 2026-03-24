@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { Service } from "@/context/AppContext";
+import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
 
@@ -411,9 +412,9 @@ export default function ProviderScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* ── Header ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Área do Prestador</Text>
+        <SoliciteLogo size="sm" />
         <Text style={styles.headerSubtitle}>
-          {activeService ? "Você tem um serviço ativo" : "Nenhum serviço ativo"}
+          {activeService ? "Serviço ativo em andamento" : "Nenhum serviço ativo"}
         </Text>
       </View>
 
