@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Modal,
   Pressable,
@@ -322,13 +324,42 @@ export default function GlobalScreen() {
   const hasAdvancedFilter = !!filterCity || !!filterNeighborhood;
 
   const handleAccept = async (service: Service) => {
+    if (!provider.registered) {
+      Alert.alert(
+        "Cadastro necessário",
+        "Para aceitar serviços, você precisa se cadastrar como prestador.",
+        [
+          { text: "Agora não", style: "cancel" },
+          { text: "Cadastrar", onPress: () => router.push("/provider-register") },
+        ]
+      );
+      return;
+    }
     if (provider.activeServiceId) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Serviço em andamento",
+        "Você já tem um serviço ativo. Finalize-o antes de aceitar outro.",
+        [
+          { text: "OK", style: "cancel" },
+          { text: "Ver serviço", onPress: () => router.push("/(tabs)/provider") },
+        ]
+      );
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const success = await acceptService(service.id);
-    if (success) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        "✅ Serviço aceito!",
+        `Você aceitou "${service.title}". Vá para a aba Prestador para iniciar o serviço.`,
+        [
+          { text: "OK", style: "cancel" },
+          { text: "Ir para Prestador", onPress: () => router.push("/(tabs)/provider") },
+        ]
+      );
+    }
   };
 
   const handleRefresh = async () => {

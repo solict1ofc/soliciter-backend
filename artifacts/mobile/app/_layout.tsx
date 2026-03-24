@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
+import { ActivityIndicator, View, Text, StyleSheet, Image } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -58,8 +58,8 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    // Load all Ionicons font variants explicitly for Android
-    ...Ionicons.font,
+    // Explicitly load Ionicons from local bundled asset for all platforms
+    Ionicons: require("../assets/fonts/Ionicons.ttf"),
   });
 
   useEffect(() => {
@@ -70,11 +70,11 @@ export default function RootLayout() {
     return (
       <View style={splash.container}>
         <View style={splash.logoBox}>
-          <View style={splash.accentOverlay} />
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 2, zIndex: 1 }}>
-            <Ionicons name="hand-right" size={38} color="#0A0A0F" />
-            <Ionicons name="hand-left"  size={38} color="#0A0A0F" />
-          </View>
+          <Image
+            source={require("../assets/images/logo.jpeg")}
+            style={{ width: 110, height: 110, borderRadius: 30 }}
+            resizeMode="cover"
+          />
         </View>
         <Text style={splash.brand}>SOLICITE</Text>
         <Text style={splash.tagline}>Serviços em Goiânia</Text>
