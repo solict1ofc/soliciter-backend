@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -94,14 +94,14 @@ function InputField({
   multiline, numberOfLines, keyboardType,
 }: {
   label: string; placeholder: string; value: string;
-  onChangeText: (v: string) => void; icon: keyof typeof Feather.glyphMap;
+  onChangeText: (v: string) => void; icon: keyof typeof Ionicons.glyphMap;
   multiline?: boolean; numberOfLines?: number; keyboardType?: any;
 }) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.inputWrapper}>
       <View style={styles.inputHeader}>
-        <Feather name={icon} size={13} color={focused ? C.primary : C.textTertiary} />
+        <Ionicons name={icon} size={13} color={focused ? C.primary : C.textTertiary} />
         <Text style={[styles.inputLabel, focused && { color: C.primary }]}>{label}</Text>
       </View>
       <TextInput
@@ -177,7 +177,7 @@ function ServiceStatusCard({
         <View style={{ flex: 1 }}>
           <Text style={styles.serviceCardTitle} numberOfLines={1}>{service.title}</Text>
           <View style={styles.metaRow}>
-            <Feather name="map-pin" size={11} color={C.textTertiary} />
+            <Ionicons name="location-outline" size={11} color={C.textTertiary} />
             <Text style={styles.metaText}>{service.neighborhood}, {service.city}</Text>
           </View>
         </View>
@@ -361,11 +361,11 @@ function SuccessScreen({
       </Text>
       <View style={styles.successBadges}>
         <View style={styles.badge}>
-          <Feather name="map-pin" size={11} color={C.primary} />
+          <Ionicons name="location-outline" size={11} color={C.primary} />
           <Text style={styles.badgeText}>{city}</Text>
         </View>
         <View style={styles.badge}>
-          <Feather name="navigation" size={11} color={C.primary} />
+          <Ionicons name="navigate-outline" size={11} color={C.primary} />
           <Text style={styles.badgeText}>{neighborhood}</Text>
         </View>
         {urgent && (
@@ -383,7 +383,7 @@ function SuccessScreen({
         style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.7 }]}
         onPress={onNew}
       >
-        <Feather name="plus" size={16} color={C.primary} />
+        <Ionicons name="add-outline" size={16} color={C.primary} />
         <Text style={styles.outlineBtnText}>Nova Solicitação</Text>
       </Pressable>
       <Pressable
@@ -391,7 +391,7 @@ function SuccessScreen({
         onPress={onMyServices}
       >
         <Text style={styles.ghostBtnText}>Ver Meus Serviços</Text>
-        <Feather name="arrow-right" size={14} color={C.textSecondary} />
+        <Ionicons name="arrow-forward-outline" size={14} color={C.textSecondary} />
       </Pressable>
     </View>
   );
@@ -451,7 +451,7 @@ function RatingModal({
         <Text style={styles.modalTitle}>Confirmar e Liberar</Text>
         {!confirmingPayment && (
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-            <Feather name="x" size={20} color={C.textSecondary} />
+            <Ionicons name="close-outline" size={20} color={C.textSecondary} />
           </Pressable>
         )}
       </View>
@@ -664,9 +664,9 @@ export default function SolicitacoesScreen() {
 
             {formStep === "form" && (
               <View style={styles.card}>
-                <InputField label="Título do Serviço" placeholder="Ex: Instalação de ar condicionado" value={title} onChangeText={setTitle} icon="file-text" />
-                <InputField label="Descrição" placeholder="Descreva os detalhes do serviço..." value={description} onChangeText={setDescription} icon="align-left" multiline numberOfLines={4} />
-                <InputField label="Valor (R$)" placeholder="0,00" value={value} onChangeText={setValue} icon="dollar-sign" keyboardType="numeric" />
+                <InputField label="Título do Serviço" placeholder="Ex: Instalação de ar condicionado" value={title} onChangeText={setTitle} icon="document-text-outline" />
+                <InputField label="Descrição" placeholder="Descreva os detalhes do serviço..." value={description} onChangeText={setDescription} icon="reorder-four-outline" multiline numberOfLines={4} />
+                <InputField label="Valor (R$)" placeholder="0,00" value={value} onChangeText={setValue} icon="cash-outline" keyboardType="numeric" />
 
                 <LocationPicker
                   city={city}

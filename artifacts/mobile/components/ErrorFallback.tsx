@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { reloadAppAsync } from "expo";
 import React, { useState } from "react";
 import {
@@ -73,7 +73,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
             },
           ]}
         >
-          <Feather name="alert-circle" size={20} color={theme.text} />
+          <Ionicons name="alert-circle-outline" size={20} color={theme.text} />
         </Pressable>
       ) : null}
 
@@ -139,7 +139,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
                     { opacity: pressed ? 0.6 : 1 },
                   ]}
                 >
-                  <Feather name="x" size={24} color={theme.text} />
+                  <Ionicons name="close-outline" size={24} color={theme.text} />
                 </Pressable>
               </View>
 

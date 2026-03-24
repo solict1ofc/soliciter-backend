@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -47,7 +47,7 @@ function PickerModal({ visible, title, items, selected, onSelect, onClose }: Pic
         </View>
 
         <View style={styles.searchBox}>
-          <Feather name="search" size={15} color={C.textTertiary} />
+          <Ionicons name="search-outline" size={15} color={C.textTertiary} />
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar..."
@@ -133,7 +133,7 @@ export default function LocationPicker({
       {/* City picker */}
       <View style={styles.fieldWrapper}>
         <View style={styles.fieldHeader}>
-          <Feather name="map-pin" size={13} color={C.textTertiary} />
+          <Ionicons name="location-outline" size={13} color={C.textTertiary} />
           <Text style={styles.fieldLabel}>Cidade</Text>
         </View>
         <Pressable
@@ -143,14 +143,14 @@ export default function LocationPicker({
           <Text style={city ? styles.pickerValue : styles.pickerPlaceholder}>
             {city || "Selecionar cidade..."}
           </Text>
-          <Feather name="chevron-down" size={16} color={C.textTertiary} />
+          <Ionicons name="chevron-down-outline" size={16} color={C.textTertiary} />
         </Pressable>
       </View>
 
       {/* Neighborhood picker */}
       <View style={styles.fieldWrapper}>
         <View style={styles.fieldHeader}>
-          <Feather name="navigation" size={13} color={city ? C.textTertiary : C.textMuted} />
+          <Ionicons name="navigate-outline" size={13} color={city ? C.textTertiary : C.textMuted} />
           <Text style={[styles.fieldLabel, !city && { color: C.textMuted }]}>Bairro</Text>
         </View>
         <Pressable
@@ -165,7 +165,7 @@ export default function LocationPicker({
           <Text style={neighborhood ? styles.pickerValue : (!city ? styles.pickerDisabledText : styles.pickerPlaceholder)}>
             {neighborhood || (city ? "Selecionar bairro..." : "Escolha a cidade primeiro")}
           </Text>
-          <Feather name="chevron-down" size={16} color={city ? C.textTertiary : C.textMuted} />
+          <Ionicons name="chevron-down-outline" size={16} color={city ? C.textTertiary : C.textMuted} />
         </Pressable>
       </View>
 

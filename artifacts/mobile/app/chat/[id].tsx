@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useRef, useState } from "react";
@@ -70,7 +70,7 @@ export default function ChatScreen() {
         <Ionicons name="alert-circle-outline" size={48} color={C.textMuted} />
         <Text style={styles.blockedTitle}>Serviço não encontrado</Text>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={16} color={C.primary} />
+          <Ionicons name="arrow-back-outline" size={16} color={C.primary} />
           <Text style={styles.backBtnText}>Voltar</Text>
         </Pressable>
       </View>

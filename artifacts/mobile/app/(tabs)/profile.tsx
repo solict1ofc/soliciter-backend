@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -172,7 +172,7 @@ export default function ProfileScreen() {
               <Ionicons name="star" size={13} color={C.primary} />
             )}
             {provider.plan === "free" && (
-              <Feather name="user" size={13} color={C.textSecondary} />
+              <Ionicons name="person-outline" size={13} color={C.textSecondary} />
             )}
             <Text
               style={[
@@ -200,8 +200,8 @@ export default function ProfileScreen() {
 
         <View style={styles.statsGrid}>
           <View style={styles.statsGridCard}>
-            <MaterialCommunityIcons
-              name="briefcase-check"
+            <Ionicons
+              name="checkmark-circle-outline"
               size={24}
               color={C.primary}
             />
@@ -356,7 +356,7 @@ export default function ProfileScreen() {
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>Solicitar Saque</Text>
                   <Pressable onPress={() => setWithdrawModal(false)} style={styles.modalClose} hitSlop={12}>
-                    <Feather name="x" size={20} color={C.textSecondary} />
+                    <Ionicons name="close-outline" size={20} color={C.textSecondary} />
                   </Pressable>
                 </View>
 
@@ -470,7 +470,7 @@ export default function ProfileScreen() {
                 style={styles.modalClose}
                 onPress={() => setSelectedPlan(null)}
               >
-                <Feather name="x" size={20} color={C.textSecondary} />
+                <Ionicons name="close-outline" size={20} color={C.textSecondary} />
               </Pressable>
 
               <Text style={styles.modalTitle}>{selectedPlan.name}</Text>

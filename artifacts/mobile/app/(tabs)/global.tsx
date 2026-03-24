@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -195,11 +195,11 @@ function ServiceCard({ service, onAccept }: { service: Service; onAccept: () => 
 
       <View style={styles.cardMeta}>
         <View style={styles.metaTag}>
-          <Feather name="map-pin" size={12} color={C.primary} />
+          <Ionicons name="location-outline" size={12} color={C.primary} />
           <Text style={styles.metaTagText}>{service.city}</Text>
         </View>
         <View style={styles.metaTag}>
-          <Feather name="navigation" size={12} color={C.textSecondary} />
+          <Ionicons name="navigate-outline" size={12} color={C.textSecondary} />
           <Text style={styles.metaTagText}>{service.neighborhood}</Text>
         </View>
       </View>
@@ -339,7 +339,7 @@ export default function GlobalScreen() {
               {hasFilter ? (
                 <Ionicons name="search" size={40} color={C.textMuted} />
               ) : (
-                <Feather name="inbox" size={40} color={C.textMuted} />
+                <Ionicons name="archive-outline" size={40} color={C.textMuted} />
               )}
             </View>
             <Text style={styles.emptyTitle}>

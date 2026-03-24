@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
@@ -29,7 +29,7 @@ function InfoRow({ icon, label, value, valueColor }: {
   return (
     <View style={styles.infoRow}>
       <View style={styles.infoRowLeft}>
-        <Feather name={icon as any} size={14} color={C.primary} />
+        <Ionicons name={icon as any} size={14} color={C.primary} />
         <Text style={styles.infoRowLabel}>{label}</Text>
       </View>
       <Text style={[styles.infoRowValue, valueColor ? { color: valueColor } : null]}>
@@ -147,10 +147,10 @@ function ServiceBlock({ service }: { service: Service }) {
       </Text>
 
       <View style={styles.infoGrid}>
-        <InfoRow icon="map-pin" label="Cidade" value={service.city} />
-        <InfoRow icon="navigation" label="Bairro" value={service.neighborhood} />
+        <InfoRow icon="location-outline" label="Cidade" value={service.city} />
+        <InfoRow icon="navigate-outline" label="Bairro" value={service.neighborhood} />
         <InfoRow
-          icon="clock"
+          icon="time-outline"
           label="Aceito em"
           value={
             service.acceptedAt
@@ -328,7 +328,7 @@ function HistoryCard({ service }: { service: Service }) {
         <View style={{ flex: 1, gap: 3 }}>
           <Text style={styles.historyCardTitle} numberOfLines={1}>{service.title}</Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Feather name="map-pin" size={11} color={C.textTertiary} />
+            <Ionicons name="location-outline" size={11} color={C.textTertiary} />
             <Text style={styles.historyCardMeta}>{service.neighborhood}, {service.city}</Text>
           </View>
         </View>
@@ -454,7 +454,7 @@ export default function ProviderScreen() {
           {!activeService ? (
             <View style={styles.emptyCard}>
               <View style={styles.emptyIcon}>
-                <MaterialCommunityIcons name="briefcase-clock-outline" size={40} color={C.textMuted} />
+                <Ionicons name="briefcase-outline" size={40} color={C.textMuted} />
               </View>
               <Text style={styles.emptyTitle}>Sem serviço ativo</Text>
               <Text style={styles.emptyDesc}>
@@ -464,7 +464,7 @@ export default function ProviderScreen() {
                 style={({ pressed }) => [styles.goGlobalBtn, pressed && { opacity: 0.7 }]}
                 onPress={() => router.push("/(tabs)/global")}
               >
-                <Feather name="globe" size={15} color={C.primary} />
+                <Ionicons name="globe-outline" size={15} color={C.primary} />
                 <Text style={styles.goGlobalText}>Ver Mercado Global</Text>
               </Pressable>
             </View>
@@ -476,15 +476,15 @@ export default function ProviderScreen() {
           <View style={styles.flowGuide}>
             <Text style={styles.flowGuideTitle}>Fluxo do Serviço</Text>
             {[
-              { icon: "globe",       label: "Serviço disponível no Global",  done: true },
-              { icon: "user-check",  label: "Você aceita o serviço",         done: !!activeService },
-              { icon: "play",        label: "Inicia a execução",              done: activeService?.status === "in_progress" || activeService?.status === "completed" || activeService?.status === "rated" },
-              { icon: "check-circle", label: "Finaliza o serviço",           done: activeService?.status === "completed" || activeService?.status === "rated" },
-              { icon: "dollar-sign", label: "Cliente confirma e libera",      done: activeService?.status === "rated" },
+              { icon: "globe-outline",            label: "Serviço disponível no Global",  done: true },
+              { icon: "person-add-outline",       label: "Você aceita o serviço",         done: !!activeService },
+              { icon: "play-outline",             label: "Inicia a execução",              done: activeService?.status === "in_progress" || activeService?.status === "completed" || activeService?.status === "rated" },
+              { icon: "checkmark-circle-outline", label: "Finaliza o serviço",           done: activeService?.status === "completed" || activeService?.status === "rated" },
+              { icon: "cash-outline",             label: "Cliente confirma e libera",      done: activeService?.status === "rated" },
             ].map((step, i) => (
               <View key={i} style={styles.flowStep}>
                 <View style={[styles.flowStepIcon, step.done && styles.flowStepIconDone]}>
-                  <Feather name={step.icon as any} size={14} color={step.done ? "#000" : C.textMuted} />
+                  <Ionicons name={step.icon as any} size={14} color={step.done ? "#000" : C.textMuted} />
                 </View>
                 <Text style={[styles.flowStepText, step.done && { color: C.text }]}>
                   {step.label}
@@ -523,7 +523,7 @@ export default function ProviderScreen() {
           ListEmptyComponent={
             <View style={styles.emptyCard}>
               <View style={styles.emptyIcon}>
-                <Feather name="clock" size={36} color={C.textMuted} />
+                <Ionicons name="time-outline" size={36} color={C.textMuted} />
               </View>
               <Text style={styles.emptyTitle}>Nenhum histórico</Text>
               <Text style={styles.emptyDesc}>

@@ -1,134 +1,69 @@
+import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
-import { SymbolView } from "expo-symbols";
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
 
-function NativeTabLayout() {
-  return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "plus.circle", selected: "plus.circle.fill" }} />
-        <Label>Solicitar</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="global">
-        <Icon sf={{ default: "globe", selected: "globe.americas.fill" }} />
-        <Label>Global</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="provider">
-        <Icon sf={{ default: "briefcase", selected: "briefcase.fill" }} />
-        <Label>Prestador</Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: "person.circle", selected: "person.circle.fill" }} />
-        <Label>Perfil</Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
-  );
-}
+const C = Colors.dark;
 
-function ClassicTabLayout() {
+type IoniconsName = keyof typeof Ionicons.glyphMap;
+
+const TAB_ICONS: Record<string, { default: IoniconsName; focused: IoniconsName }> = {
+  index:    { default: "add-circle-outline",  focused: "add-circle" },
+  global:   { default: "globe-outline",       focused: "globe" },
+  provider: { default: "briefcase-outline",   focused: "briefcase" },
+  profile:  { default: "person-outline",      focused: "person" },
+};
+
+export default function TabLayout() {
   const isIOS = Platform.OS === "ios";
-  const isWeb = Platform.OS === "web";
   const safeAreaInsets = useSafeAreaInsets();
 
   return (
     <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors.dark.primary,
-        tabBarInactiveTintColor: Colors.dark.tabBarInactive,
+      screenOptions={({ route }) => ({
+        tabBarActiveTintColor: C.primary,
+        tabBarInactiveTintColor: C.textSecondary,
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : Colors.dark.tabBar,
+          backgroundColor: isIOS ? "transparent" : C.tabBar,
           borderTopWidth: 1,
-          borderTopColor: Colors.dark.border,
+          borderTopColor: C.border,
           elevation: 0,
+          height: 56 + safeAreaInsets.bottom,
           paddingBottom: safeAreaInsets.bottom,
-          ...(isWeb ? { height: 84 } : {}),
         },
         tabBarBackground: () =>
           isIOS ? (
-            <BlurView
-              intensity={80}
-              tint="dark"
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
           ) : (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: Colors.dark.tabBar },
-              ]}
-            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: C.tabBar }]} />
           ),
         tabBarLabelStyle: {
           fontFamily: "Inter_500Medium",
           fontSize: 11,
         },
-      }}
+        tabBarIcon: ({ color, focused }) => {
+          const icons = TAB_ICONS[route.name];
+          if (!icons) return null;
+          return (
+            <Ionicons
+              name={focused ? icons.focused : icons.default}
+              size={24}
+              color={color}
+            />
+          );
+        },
+      })}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Solicitar",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="plus.circle.fill" tintColor={color} size={24} />
-            ) : (
-              <Feather name="plus-circle" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="global"
-        options={{
-          title: "Global",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="globe.americas.fill" tintColor={color} size={24} />
-            ) : (
-              <Feather name="globe" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="provider"
-        options={{
-          title: "Prestador",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="briefcase.fill" tintColor={color} size={24} />
-            ) : (
-              <MaterialCommunityIcons name="briefcase-outline" size={22} color={color} />
-            ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Perfil",
-          tabBarIcon: ({ color }) =>
-            isIOS ? (
-              <SymbolView name="person.circle.fill" tintColor={color} size={24} />
-            ) : (
-              <Feather name="user" size={22} color={color} />
-            ),
-        }}
-      />
+      <Tabs.Screen name="index"    options={{ title: "Solicitar" }} />
+      <Tabs.Screen name="global"   options={{ title: "Global" }} />
+      <Tabs.Screen name="provider" options={{ title: "Prestador" }} />
+      <Tabs.Screen name="profile"  options={{ title: "Perfil" }} />
     </Tabs>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }
