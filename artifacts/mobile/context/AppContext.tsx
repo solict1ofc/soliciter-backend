@@ -44,6 +44,18 @@ export type ChatMessage = {
 
 export type ProviderPlan = "free" | "basic" | "destaque" | "premium";
 
+export type ProviderRegistration = {
+  fullName: string;
+  cpf: string;
+  birthDate: string;       // DD/MM/YYYY
+  phone: string;
+  specialty: string;       // área de atuação
+  city: string;
+  neighborhood: string;
+  acceptedTerms: boolean;
+  registeredAt: string;    // ISO date
+};
+
 export type ProviderProfile = {
   id: string;
   name: string;
@@ -54,6 +66,8 @@ export type ProviderProfile = {
   activeServiceId?: string;
   completedJobs: number;
   earnings: number;
+  registered: boolean;
+  registration?: ProviderRegistration;
 };
 
 const SERVICES_KEY = "servicosapp_services_v2";
@@ -64,13 +78,14 @@ export const PLATFORM_FEE_RATE = 0.1;
 
 const defaultProvider: ProviderProfile = {
   id: "provider_1",
-  name: "João Silva",
-  rating: 4.8,
-  totalRatings: 127,
+  name: "",
+  rating: 0,
+  totalRatings: 0,
   plan: "free",
   activeServiceId: undefined,
-  completedJobs: 47,
-  earnings: 3240.5,
+  completedJobs: 0,
+  earnings: 0,
+  registered: false,
 };
 
 function useAppContextValue() {
@@ -299,6 +314,22 @@ function useAppContextValue() {
     [provider, saveProvider]
   );
 
+  const registerProvider = useCallback(
+    async (data: Omit<ProviderRegistration, "registeredAt">) => {
+      const registration: ProviderRegistration = {
+        ...data,
+        registeredAt: new Date().toISOString(),
+      };
+      await saveProvider({
+        ...provider,
+        name: data.fullName,
+        registered: true,
+        registration,
+      });
+    },
+    [provider, saveProvider]
+  );
+
   const availableServices = services.filter((s) => s.status === "available");
   const activeService = provider.activeServiceId
     ? services.find((s) => s.id === provider.activeServiceId)
@@ -319,6 +350,7 @@ function useAppContextValue() {
     sendMessage,
     markChatRead,
     subscribePlan,
+    registerProvider,
     PLATFORM_FEE_RATE,
     URGENT_FEE,
   };

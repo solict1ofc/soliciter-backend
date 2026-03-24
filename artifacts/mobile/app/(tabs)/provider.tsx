@@ -382,11 +382,69 @@ function HistoryCard({ service }: { service: Service }) {
   );
 }
 
+function ProviderRegisterGate() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <SoliciteLogo size="sm" />
+        <Text style={styles.headerSubtitle}>Área do Prestador</Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 20 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Icon */}
+        <View style={styles.gateIconBox}>
+          <Ionicons name="person-add" size={44} color="#000" />
+        </View>
+
+        <Text style={styles.gateTitle}>Cadastre-se como Prestador</Text>
+        <Text style={styles.gateDesc}>
+          Para aceitar serviços e ganhar dinheiro na SOLICITE, você precisa criar
+          seu perfil de prestador. O processo é rápido e seguro.
+        </Text>
+
+        {/* Benefits */}
+        <View style={styles.gateBenefits}>
+          {[
+            { icon: "briefcase-outline",     text: "Aceite serviços na sua área" },
+            { icon: "cash-outline",          text: "Receba pagamentos com segurança" },
+            { icon: "star-outline",          text: "Construa sua reputação" },
+            { icon: "shield-checkmark-outline", text: "Plataforma verificada e segura" },
+          ].map((b) => (
+            <View key={b.icon} style={styles.gateBenefitRow}>
+              <View style={styles.gateBenefitIcon}>
+                <Ionicons name={b.icon as any} size={16} color={C.primary} />
+              </View>
+              <Text style={styles.gateBenefitText}>{b.text}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.gateBtn, pressed && { opacity: 0.85 }]}
+          onPress={() => router.push("/provider-register")}
+        >
+          <Ionicons name="arrow-forward-circle-outline" size={22} color="#000" />
+          <Text style={styles.gateBtnText}>Iniciar Cadastro</Text>
+        </Pressable>
+
+        <Text style={styles.gateFootnote}>
+          Seus dados são protegidos por criptografia e nunca compartilhados com terceiros.
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function ProviderScreen() {
   const insets = useSafeAreaInsets();
   const { activeService, provider, services } = useApp();
   const [tab, setTab] = useState<"ativo" | "historico">("ativo");
 
+  // Hooks must always run — before any conditional return
   const historyServices = useMemo(() => {
     return [...services]
       .filter((s) =>
@@ -407,6 +465,11 @@ export default function ProviderScreen() {
         return sum + (s.finalValue - fee);
       }, 0);
   }, [historyServices, provider.plan]);
+
+  // Gate: require registration (after all hooks)
+  if (!provider.registered) {
+    return <ProviderRegisterGate />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
