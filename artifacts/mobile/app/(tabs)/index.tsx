@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -24,6 +25,8 @@ import LocationPicker from "@/components/LocationPicker";
 import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
+
+const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
 // ─── Status config ───────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
@@ -290,9 +293,8 @@ function ServiceStatusCard({
 function PaymentScreen({
   service, paying, onPay,
 }: {
-  service: Service | undefined; paying: boolean; onPay: (method: PayMethod) => void;
+  service: Service | undefined; paying: boolean; onPay: () => void;
 }) {
-  const [method, setMethod] = useState<PayMethod>("pix");
   if (!service) return null;
 
   return (
@@ -330,35 +332,37 @@ function PaymentScreen({
         </View>
       </View>
 
-      {/* Method selector */}
-      <View>
-        <Text style={styles.sectionLabel}>Forma de Pagamento</Text>
-        <PaymentMethodPicker selected={method} onChange={setMethod} />
+      {/* Stripe info */}
+      <View style={styles.stripeInfo}>
+        <Ionicons name="card-outline" size={16} color={C.textSecondary} />
+        <Text style={styles.stripeInfoText}>
+          Você será redirecionado para o checkout seguro do Stripe (cartão, PIX e mais)
+        </Text>
       </View>
 
-      {/* Lock + pay button */}
+      {/* Stripe pay button */}
       <Pressable
         style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]}
-        onPress={() => onPay(method)}
+        onPress={onPay}
         disabled={paying}
       >
         {paying ? (
           <>
             <ActivityIndicator color="#000" size="small" />
-            <Text style={styles.payBtnText}>Processando pagamento...</Text>
+            <Text style={styles.payBtnText}>Abrindo checkout seguro...</Text>
           </>
         ) : (
           <>
             <Ionicons name="lock-closed" size={20} color="#000" />
             <Text style={styles.payBtnText}>
-              Pagar e Reter R$ {service.finalValue.toFixed(2)}
+              Pagar R$ {service.finalValue.toFixed(2)} com Stripe
             </Text>
           </>
         )}
       </Pressable>
 
       <Text style={styles.payNote}>
-        🔒 Pagamento processado com segurança. Dinheiro liberado ao prestador somente após sua confirmação.
+        🔒 Pagamento processado pelo Stripe. Dinheiro liberado ao prestador somente após sua confirmação.
       </Text>
     </View>
   );
@@ -609,22 +613,89 @@ export default function SolicitacoesScreen() {
     }
   };
 
-  const handlePay = async (_method: PayMethod) => {
-    if (!pendingId) return;
+  const openStripeCheckout = async (serviceId: string, svc: Service): Promise<boolean> => {
+    try {
+      const amountInCents = Math.round(svc.finalValue * 100);
+      const res = await fetch(`${API_BASE}/api/payment/create-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId,
+          amountInCents,
+          title: svc.title,
+          urgent: svc.urgent,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Erro", err.error || "Não foi possível iniciar o pagamento. Tente novamente.");
+        return false;
+      }
+      const { url } = await res.json();
+      if (!url) {
+        Alert.alert("Erro", "URL de pagamento inválida.");
+        return false;
+      }
+      await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
+
+      // Poll for payment status after browser closes
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        try {
+          const statusRes = await fetch(`${API_BASE}/api/payment/status/${serviceId}`);
+          if (statusRes.ok) {
+            const { status } = await statusRes.json();
+            if (status === "paid") return true;
+          }
+        } catch (_) {}
+      }
+      return false;
+    } catch (error: any) {
+      Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
+      return false;
+    }
+  };
+
+  const handlePay = async () => {
+    if (!pendingId || !pendingService) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setPaying(true);
-    await new Promise((r) => setTimeout(r, 1800)); // simulate processing
-    await confirmPayment(pendingId);
-    setPaying(false);
-    setFormStep("success");
+    try {
+      const paid = await openStripeCheckout(pendingId, pendingService);
+      if (paid) {
+        await confirmPayment(pendingId);
+        setFormStep("success");
+      } else {
+        Alert.alert(
+          "Pagamento não confirmado",
+          "O pagamento não foi concluído. Sua solicitação continua salva — tente novamente quando quiser.",
+          [{ text: "OK" }]
+        );
+      }
+    } finally {
+      setPaying(false);
+    }
   };
 
   const handlePayFromCard = async (serviceId: string) => {
+    const svc = services.find((s) => s.id === serviceId);
+    if (!svc) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPaying(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    await confirmPayment(serviceId);
-    setPaying(false);
+    try {
+      const paid = await openStripeCheckout(serviceId, svc);
+      if (paid) {
+        await confirmPayment(serviceId);
+      } else {
+        Alert.alert(
+          "Pagamento não concluído",
+          "Tente novamente quando quiser — sua solicitação está salva.",
+          [{ text: "OK" }]
+        );
+      }
+    } finally {
+      setPaying(false);
+    }
   };
 
   const handleConfirmAndRate = async (rating: number) => {
@@ -763,7 +834,7 @@ export default function SolicitacoesScreen() {
             )}
 
             {formStep === "payment" && (
-              <PaymentScreen service={pendingService} paying={paying} onPay={handlePay} />
+              <PaymentScreen service={pendingService} paying={paying} onPay={() => handlePay()} />
             )}
 
             {formStep === "success" && (
@@ -947,6 +1018,13 @@ const styles = StyleSheet.create({
   },
   escrowNoticeTitle: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.primary, marginBottom: 4 },
   escrowNoticeDesc: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 18 },
+
+  stripeInfo: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 10, padding: 12,
+    borderWidth: 1, borderColor: C.border,
+  },
+  stripeInfoText: { flex: 1, fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 17 },
 
   sectionLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: C.textTertiary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
 

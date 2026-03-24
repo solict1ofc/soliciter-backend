@@ -91,6 +91,37 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/mobile` (`@workspace/mobile`)
+
+Expo React Native app — "SOLICITE" services marketplace. Dark tech design (cyan/navy palette).
+- 4 tabs: Solicitations, Global marketplace, Provider area, Profile
+- Service lifecycle: `pending_payment → available → accepted → in_progress → completed → rated`
+- **Stripe Checkout payment flow**: mobile calls backend to create Stripe Checkout Session, opens browser, polls status after browser closes
+- Key files: `app/(tabs)/index.tsx` (client flow), `app/(tabs)/global.tsx` (marketplace), `app/(tabs)/provider.tsx` (provider), `context/AppContext.tsx`
+- Chat available after service is accepted
+- AsyncStorage keys: `servicosapp_services_v2` (services), `servicosapp_provider_v3` (provider)
+- `EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN` — used to construct API URL: `https://${EXPO_PUBLIC_DOMAIN}/api`
+
+### Stripe Payment Integration
+
+End-to-end Stripe Checkout payment flow for the SOLICITE app:
+
+- **DB table**: `service_payments` (`service_id`, `session_id`, `amount`, `status`, `created_at`, `paid_at`)
+- **Backend** (`artifacts/api-server/src/`):
+  - `stripeClient.ts` — gets Stripe credentials from Replit Stripe connector
+  - `routes/payment.ts` — 4 endpoints: `POST /api/payment/create-checkout`, `GET /api/payment/status/:serviceId`, `GET /api/payment/success`, `GET /api/payment/cancel`
+  - `app.ts` — webhook route at `/api/stripe/webhook` (BEFORE express.json middleware)
+- **Mobile flow** (`artifacts/mobile/app/(tabs)/index.tsx`):
+  1. User fills service form → creates service with `pending_payment` status
+  2. Payment screen shows "Pagar com Stripe" button
+  3. App calls `POST /api/payment/create-checkout` → gets checkout URL
+  4. Opens Stripe Checkout in browser via `expo-web-browser`
+  5. User pays → Stripe redirects to `/api/payment/success` → DB updated to `paid`
+  6. After browser closes, app polls `/api/payment/status/:serviceId` for up to 8 seconds
+  7. If `paid`, `confirmPayment()` is called → service becomes `available` in marketplace
+- **Platform fee**: 10% only for "free" plan providers; waived for basic/destaque/premium
+- **Escrow model**: client pays upfront, funds held in platform until service completion
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
