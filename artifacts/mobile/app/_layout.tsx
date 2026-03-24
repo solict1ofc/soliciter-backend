@@ -58,8 +58,6 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
-    // Explicitly load Ionicons from local bundled asset for all platforms
-    Ionicons: require("../assets/fonts/Ionicons.ttf"),
   });
 
   useEffect(() => {
