@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,16 +25,16 @@ const C = {
   card: "#12121A",
   border: "#1E1E2E",
   primary: "#00D4FF",
-  primaryGlow: "rgba(0,212,255,0.08)",
+  primaryDark: "#00A8CC",
+  primaryGlow: "rgba(0,212,255,0.10)",
   text: "#FFFFFF",
   textSecondary: "#A0A0B8",
   textMuted: "#555570",
-  danger: "#FF3B5C",
-  success: "#00E676",
 };
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const { login } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -51,7 +52,6 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-      // AuthContext + _layout redirects automatically
     } catch (err: any) {
       Alert.alert("Erro ao entrar", err.message ?? "Verifique seus dados e tente novamente.");
     } finally {
@@ -65,11 +65,19 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[
+          styles.container,
+          {
+            minHeight: screenHeight,
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 24,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        bounces={false}
       >
-        {/* Logo + branding */}
+        {/* ── Logo + branding ── */}
         <View style={styles.logoArea}>
           <View style={styles.logoRing2} />
           <View style={styles.logoRing1} />
@@ -84,7 +92,7 @@ export default function LoginScreen() {
           <Text style={styles.tagline}>Serviços sob demanda</Text>
         </View>
 
-        {/* Card */}
+        {/* ── Form card ── */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Entrar na conta</Text>
 
@@ -126,18 +134,24 @@ export default function LoginScreen() {
                 onSubmitEditing={handleLogin}
                 returnKeyType="done"
               />
-              <Pressable onPress={() => setShowPass((v) => !v)} hitSlop={12}>
-                <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={18} color={C.textMuted} />
+              <Pressable onPress={() => setShowPass((v) => !v)} hitSlop={14}>
+                <Ionicons
+                  name={showPass ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={focused === "pass" ? C.primary : C.textMuted}
+                />
               </Pressable>
             </View>
           </View>
 
-          {/* Botão entrar */}
+          {/* ── Botão Entrar ── */}
           <Pressable
-            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
             onPress={handleLogin}
             disabled={loading}
           >
+            {/* Glow layer */}
+            <View style={styles.btnGlow} />
             {loading ? (
               <ActivityIndicator color="#000" size="small" />
             ) : (
@@ -157,10 +171,10 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        {/* Ir para cadastro */}
+        {/* ── Link cadastro ── */}
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Ainda não tem conta?</Text>
-          <Pressable onPress={() => router.replace("/(auth)/register")} hitSlop={12}>
+          <Pressable onPress={() => router.replace("/(auth)/register")} hitSlop={14}>
             <Text style={styles.switchLink}> Cadastre-se</Text>
           </Pressable>
         </View>
@@ -173,69 +187,82 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     backgroundColor: C.bg,
-    paddingHorizontal: 20,
-    gap: 24,
+    paddingHorizontal: 24,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 20,
   },
 
-  logoArea: { alignItems: "center", gap: 10, width: "100%", marginBottom: 4 },
+  // ── Logo ──────────────────────────────────────────────────────────────────
+  logoArea: {
+    alignItems: "center",
+    gap: 12,
+    width: "100%",
+    marginBottom: 8,
+  },
   logoRing1: {
     position: "absolute",
-    top: -10,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    top: -14,
+    width: 196,
+    height: 196,
+    borderRadius: 98,
     borderWidth: 1,
-    borderColor: "rgba(0,212,255,0.12)",
+    borderColor: "rgba(0,212,255,0.14)",
     backgroundColor: "transparent",
   },
   logoRing2: {
     position: "absolute",
-    top: -20,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
+    top: -26,
+    width: 256,
+    height: 256,
+    borderRadius: 128,
     borderWidth: 1,
     borderColor: "rgba(0,212,255,0.06)",
     backgroundColor: "transparent",
   },
   logoBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 28,
+    width: 104,
+    height: 104,
+    borderRadius: 30,
     backgroundColor: C.primary,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     shadowColor: C.primary,
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 16,
+    shadowOpacity: 0.65,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 20,
     borderWidth: 2,
-    borderColor: "rgba(0,212,255,0.4)",
+    borderColor: "rgba(0,212,255,0.5)",
   },
-  logoImage: { width: 100, height: 100 },
+  logoImage: { width: 104, height: 104 },
   brand: {
     fontSize: 30,
     fontWeight: "800",
     color: C.text,
-    letterSpacing: 5,
+    letterSpacing: 6,
   },
   tagline: {
     fontSize: 13,
     color: C.textSecondary,
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
 
+  // ── Card ──────────────────────────────────────────────────────────────────
   card: {
     width: "100%",
     backgroundColor: C.card,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: C.border,
     padding: 24,
     gap: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
   },
   cardTitle: {
     fontSize: 22,
@@ -244,26 +271,30 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
 
+  // ── Fields ────────────────────────────────────────────────────────────────
   fieldGroup: { gap: 6 },
   label: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: C.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0E0E18",
-    borderRadius: 12,
+    backgroundColor: "#0D0D17",
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: C.border,
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 10,
   },
-  inputRowFocused: { borderColor: C.primary, backgroundColor: C.primaryGlow },
+  inputRowFocused: {
+    borderColor: C.primary,
+    backgroundColor: C.primaryGlow,
+  },
   input: {
     flex: 1,
     fontSize: 15,
@@ -271,26 +302,55 @@ const styles = StyleSheet.create({
     color: C.text,
   },
 
+  // ── Botão principal ───────────────────────────────────────────────────────
   btn: {
+    overflow: "hidden",
+    position: "relative",
     backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 17,
+    borderRadius: 16,
+    paddingVertical: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    marginTop: 4,
+    marginTop: 6,
+    // Sombra/glow cyan
+    shadowColor: C.primary,
+    shadowOpacity: 0.55,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 18,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.55)",
+  },
+  btnPressed: {
+    opacity: 0.82,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  btnGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "50%",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   btnText: {
     fontSize: 17,
     fontFamily: "Inter_700Bold",
     color: "#000",
+    letterSpacing: 0.3,
   },
 
+  // ── Nota de segurança ─────────────────────────────────────────────────────
   securityNote: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
+    gap: 8,
     backgroundColor: "rgba(255,255,255,0.03)",
     borderRadius: 10,
     padding: 12,
@@ -305,6 +365,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
+  // ── Switch row ────────────────────────────────────────────────────────────
   switchRow: {
     flexDirection: "row",
     alignItems: "center",

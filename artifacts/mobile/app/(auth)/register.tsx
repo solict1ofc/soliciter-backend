@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -44,6 +45,7 @@ type FieldId = "name" | "cpf" | "email" | "pass" | "confirm";
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const { register } = useAuth();
 
   const [name, setName] = useState("");
@@ -137,10 +139,15 @@ export default function RegisterScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.container,
-          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 },
+          {
+            minHeight: screenHeight,
+            paddingTop: insets.top + 16,
+            paddingBottom: insets.bottom + 24,
+          },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        bounces={false}
       >
         {/* Logo */}
         <View style={styles.logoArea}>
@@ -215,10 +222,11 @@ export default function RegisterScreen() {
 
           {/* Botão cadastrar */}
           <Pressable
-            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.82, shadowOpacity: 0.3 }]}
             onPress={handleRegister}
             disabled={loading}
           >
+            <View style={styles.btnGlow} />
             {loading ? (
               <ActivityIndicator color="#000" size="small" />
             ) : (
@@ -246,9 +254,10 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     backgroundColor: C.bg,
-    paddingHorizontal: 20,
-    gap: 24,
+    paddingHorizontal: 24,
+    gap: 20,
     alignItems: "center",
+    justifyContent: "center",
   },
 
   logoArea: { alignItems: "center", gap: 8, width: "100%" },
@@ -334,16 +343,35 @@ const styles = StyleSheet.create({
   },
 
   btn: {
+    overflow: "hidden",
+    position: "relative",
     backgroundColor: C.primary,
-    borderRadius: 14,
-    paddingVertical: 17,
+    borderRadius: 16,
+    paddingVertical: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    marginTop: 4,
+    marginTop: 6,
+    shadowColor: C.primary,
+    shadowOpacity: 0.55,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 18,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.55)",
   },
-  btnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#000" },
+  btnGlow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: "50%",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  btnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#000", letterSpacing: 0.3 },
 
   switchRow: {
     flexDirection: "row",
