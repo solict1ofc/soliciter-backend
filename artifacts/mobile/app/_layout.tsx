@@ -19,16 +19,17 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppContextProvider, useApp } from "@/context/AppContext";
 import { AuthContextProvider, useAuth } from "@/context/AuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
-import { useServiceNotifications } from "@/hooks/useNotifications";
+import { useServiceNotifications, useMarketplaceNotifications } from "@/hooks/useNotifications";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-// Watches service status changes and fires in-app notifications
+// Watches service status changes and marketplace arrivals — fires in-app notifications
 function NotificationWatcher() {
-  const { services } = useApp();
+  const { services, availableServices } = useApp();
   useServiceNotifications(services);
+  useMarketplaceNotifications(availableServices);
   return null;
 }
 
