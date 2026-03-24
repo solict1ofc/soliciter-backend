@@ -69,16 +69,28 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) {
     return (
       <View style={splash.container}>
+        {/* Glow rings */}
+        <View style={splash.ring1} />
+        <View style={splash.ring2} />
+
+        {/* Logo principal — foto das mãos */}
         <View style={splash.logoBox}>
           <Image
             source={require("../assets/images/logo.jpeg")}
-            style={{ width: 110, height: 110, borderRadius: 30 }}
+            style={splash.logoImage}
             resizeMode="cover"
           />
         </View>
+
+        {/* Nome do app */}
         <Text style={splash.brand}>SOLICITE</Text>
         <Text style={splash.tagline}>Serviços em Goiânia</Text>
-        <ActivityIndicator color="#00D4FF" size="large" style={{ marginTop: 32 }} />
+
+        {/* Barra de carregamento */}
+        <View style={splash.loadingBar}>
+          <View style={splash.loadingFill} />
+        </View>
+        <Text style={splash.loadingText}>Carregando...</Text>
       </View>
     );
   }
@@ -109,43 +121,78 @@ const splash = StyleSheet.create({
     backgroundColor: "#0A0A0F",
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
+    gap: 20,
   },
+  // Anéis de brilho atrás da logo
+  ring1: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.15)",
+    backgroundColor: "transparent",
+  },
+  ring2: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.25)",
+    backgroundColor: "transparent",
+  },
+  // Moldura da logo
   logoBox: {
-    width: 110,
-    height: 110,
-    borderRadius: 30,
+    width: 180,
+    height: 180,
+    borderRadius: 48,
     backgroundColor: "#00D4FF",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
     shadowColor: "#00D4FF",
-    shadowOpacity: 0.6,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 12,
+    shadowOpacity: 0.65,
+    shadowRadius: 40,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 20,
+    borderWidth: 3,
+    borderColor: "rgba(0,212,255,0.5)",
   },
-  accentOverlay: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 65,
-    height: 65,
-    borderRadius: 18,
-    backgroundColor: "#6C63FF",
-    opacity: 0.4,
-    transform: [{ rotate: "20deg" }],
+  logoImage: {
+    width: 180,
+    height: 180,
   },
   brand: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: "800",
     color: "#FFFFFF",
-    letterSpacing: 4,
-    marginTop: 8,
+    letterSpacing: 6,
+    marginTop: 4,
   },
   tagline: {
     fontSize: 15,
     color: "#A0A0B8",
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+  },
+  // Barra de progresso
+  loadingBar: {
+    width: 160,
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  loadingFill: {
+    width: "60%",
+    height: "100%",
+    backgroundColor: "#00D4FF",
+    borderRadius: 2,
+  },
+  loadingText: {
+    fontSize: 12,
+    color: "rgba(160,160,184,0.6)",
+    letterSpacing: 1,
   },
 });
