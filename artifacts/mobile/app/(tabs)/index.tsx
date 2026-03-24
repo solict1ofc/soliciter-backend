@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -260,6 +261,25 @@ function ServiceStatusCard({
             />
           ))}
         </View>
+      )}
+
+      {/* Chat button — only after acceptance */}
+      {["accepted", "in_progress", "completed", "rated"].includes(service.status) && (
+        <Pressable
+          style={({ pressed }) => [styles.chatBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => router.push(`/chat/${service.id}?role=client` as any)}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <Ionicons name="chatbubble-ellipses-outline" size={17} color={C.primary} />
+            <Text style={styles.chatBtnText}>Chat com o Prestador</Text>
+          </View>
+          {(service.unreadClient ?? 0) > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{service.unreadClient}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward-outline" size={16} color={C.textMuted} />
+        </Pressable>
       )}
     </View>
   );
@@ -1056,4 +1076,21 @@ const styles = StyleSheet.create({
   releaseLabel: { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary },
   releaseValue: { fontSize: 32, fontFamily: "Inter_700Bold", color: C.success },
   releaseFee: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textMuted },
+
+  // Chat button (in service card)
+  chatBtn: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: C.primaryGlow, borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 14,
+    borderWidth: 1, borderColor: C.primary + "60",
+    gap: 4,
+  },
+  chatBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.primary },
+  unreadBadge: {
+    backgroundColor: C.danger, borderRadius: 10,
+    minWidth: 20, height: 20,
+    alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" },
 });

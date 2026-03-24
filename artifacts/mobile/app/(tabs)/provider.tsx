@@ -214,14 +214,22 @@ function ServiceBlock({ service }: { service: Service }) {
         </View>
       )}
 
-      {/* Chat button */}
-      {(isAccepted || isInProgress) && (
+      {/* Chat button — available after acceptance */}
+      {(isAccepted || isInProgress || service.status === "completed") && (
         <Pressable
           style={({ pressed }) => [styles.chatBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => router.push(`/chat/${service.id}`)}
+          onPress={() => router.push(`/chat/${service.id}?role=provider` as any)}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={18} color={C.primary} />
-          <Text style={styles.chatBtnText}>Chat com o Cliente</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <Ionicons name="chatbubble-ellipses-outline" size={18} color={C.primary} />
+            <Text style={styles.chatBtnText}>Chat com o Cliente</Text>
+          </View>
+          {(service.unreadProvider ?? 0) > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{service.unreadProvider}</Text>
+            </View>
+          )}
+          <Ionicons name="chevron-forward-outline" size={15} color={C.textMuted} />
         </Pressable>
       )}
 
@@ -808,17 +816,32 @@ const styles = StyleSheet.create({
   chatBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.primary,
+    backgroundColor: C.primaryGlow,
   },
   chatBtnText: {
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
     color: C.primary,
+  },
+  unreadBadge: {
+    backgroundColor: C.danger,
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+  },
+  unreadBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
   },
   bigActionBtn: {
     borderRadius: 16,

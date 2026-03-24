@@ -29,6 +29,9 @@ export type Service = {
   clientRating?: number;
   providerRating?: number;
   chatMessages?: ChatMessage[];
+  // Unread counters: messages the role hasn't seen yet
+  unreadClient?: number;   // new messages FROM provider, not yet seen by client
+  unreadProvider?: number; // new messages FROM client, not yet seen by provider
 };
 
 export type ChatMessage = {
@@ -251,7 +254,33 @@ function useAppContextValue() {
       };
       const updated = services.map((s) =>
         s.id === serviceId
-          ? { ...s, chatMessages: [...(s.chatMessages ?? []), msg] }
+          ? {
+              ...s,
+              chatMessages: [...(s.chatMessages ?? []), msg],
+              // Increment unread counter for the RECIPIENT
+              unreadClient: senderId === "provider"
+                ? (s.unreadClient ?? 0) + 1
+                : (s.unreadClient ?? 0),
+              unreadProvider: senderId === "client"
+                ? (s.unreadProvider ?? 0) + 1
+                : (s.unreadProvider ?? 0),
+            }
+          : s
+      );
+      await saveServices(updated);
+    },
+    [services, saveServices]
+  );
+
+  const markChatRead = useCallback(
+    async (serviceId: string, role: "client" | "provider") => {
+      const updated = services.map((s) =>
+        s.id === serviceId
+          ? {
+              ...s,
+              unreadClient: role === "client" ? 0 : s.unreadClient,
+              unreadProvider: role === "provider" ? 0 : s.unreadProvider,
+            }
           : s
       );
       await saveServices(updated);
@@ -286,6 +315,7 @@ function useAppContextValue() {
     finalizeService,
     confirmAndRate,
     sendMessage,
+    markChatRead,
     subscribePlan,
     PLATFORM_FEE_RATE,
     URGENT_FEE,
