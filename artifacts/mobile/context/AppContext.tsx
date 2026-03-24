@@ -169,7 +169,12 @@ function useAppContextValue() {
       neighborhood: string;
       urgent: boolean;
     }) => {
-      const finalValue = data.urgent ? data.value + URGENT_FEE : data.value;
+      const isPremium = user?.isPremium ?? false;
+      // Premium users get automatic urgency at no extra cost
+      const isUrgent = isPremium ? true : data.urgent;
+      const urgencyFee = isPremium ? 0 : (data.urgent ? URGENT_FEE : 0);
+      const finalValue = data.value + urgencyFee;
+
       const newService: Service = {
         id: `svc_${Date.now()}`,
         title: data.title,
@@ -178,8 +183,8 @@ function useAppContextValue() {
         finalValue,
         city: data.city,
         neighborhood: data.neighborhood,
-        urgent: data.urgent,
-        priority: data.urgent,
+        urgent: isUrgent,
+        priority: isUrgent,
         status: "pending_payment",
         createdAt: new Date().toISOString(),
         chatMessages: [],
@@ -187,7 +192,7 @@ function useAppContextValue() {
       await saveServices([...services, newService]);
       return newService;
     },
-    [services, saveServices]
+    [services, saveServices, user]
   );
 
   // ─── 2. Cliente paga → available ──────────────────────────────────────────
@@ -361,7 +366,7 @@ function useAppContextValue() {
         const res = await fetch(`${API_BASE}/criar-assinatura`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan }),
+          body: JSON.stringify({ plan, userId: user?.id }),
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -375,7 +380,7 @@ function useAppContextValue() {
         return null;
       }
     },
-    []
+    [user]
   );
 
   const activatePlan = useCallback(

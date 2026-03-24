@@ -1,4 +1,4 @@
-import { db, servicePaymentsTable } from "@workspace/db";
+import { db, servicePaymentsTable, usersTable } from "@workspace/db";
 import cors from "cors";
 import { eq } from "drizzle-orm";
 import express, { type Express } from "express";
@@ -16,9 +16,10 @@ app.post(
   async (req, res) => {
     try {
       const event = JSON.parse(req.body.toString());
+      const session = event.data?.object;
 
-      if (event.type === "checkout.session.completed") {
-        const session = event.data?.object;
+      // ── Service payment completed ──────────────────────────────────────────
+      if (event.type === "checkout.session.completed" && session?.mode === "payment") {
         const serviceId = session?.metadata?.serviceId;
         if (serviceId && session?.payment_status === "paid") {
           await db
@@ -26,6 +27,43 @@ app.post(
             .set({ status: "paid", paidAt: new Date() })
             .where(eq(servicePaymentsTable.serviceId, serviceId))
             .catch(() => {});
+        }
+      }
+
+      // ── Subscription checkout completed ────────────────────────────────────
+      if (event.type === "checkout.session.completed" && session?.mode === "subscription") {
+        const userId = session?.metadata?.userId;
+        if (userId && !isNaN(parseInt(userId))) {
+          const expiresAt = new Date();
+          expiresAt.setMonth(expiresAt.getMonth() + 1);
+          await db
+            .update(usersTable)
+            .set({ isPremium: true, premiumExpiresAt: expiresAt })
+            .where(eq(usersTable.id, parseInt(userId)))
+            .catch((e) => logger.error({ err: e }, "Failed to activate premium via webhook"));
+        }
+      }
+
+      // ── Subscription invoice paid (renewal) ────────────────────────────────
+      if (event.type === "invoice.payment_succeeded") {
+        const subscriptionId = session?.subscription;
+        if (subscriptionId) {
+          try {
+            const stripe = await getUncachableStripeClient();
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId as string);
+            const userId = (subscription.metadata as any)?.userId;
+            if (userId && !isNaN(parseInt(userId))) {
+              const expiresAt = new Date();
+              expiresAt.setMonth(expiresAt.getMonth() + 1);
+              await db
+                .update(usersTable)
+                .set({ isPremium: true, premiumExpiresAt: expiresAt })
+                .where(eq(usersTable.id, parseInt(userId)))
+                .catch(() => {});
+            }
+          } catch (e) {
+            logger.error({ err: e }, "Failed to renew premium via webhook");
+          }
         }
       }
 

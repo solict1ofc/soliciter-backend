@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { Service, ServiceStatus } from "@/context/AppContext";
+import { useAuth } from "@/context/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
 import { SoliciteLogo } from "@/components/SoliciteLogo";
 
@@ -555,7 +556,10 @@ function RatingModal({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function SolicitacoesScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { services, createService, confirmPayment, confirmAndRate, URGENT_FEE, PLATFORM_FEE_RATE, provider } = useApp();
+
+  const isPremium = user?.isPremium ?? false;
 
   const [activeTab, setActiveTab] = useState<"nova" | "meus">("nova");
 
@@ -577,7 +581,8 @@ export default function SolicitacoesScreen() {
   const [paymentResult, setPaymentResult]     = useState<{ fee: number; providerEarning: number; platformFeeApplied: boolean } | null>(null);
 
   const numericValue = parseFloat(value.replace(",", ".")) || 0;
-  const finalValue   = urgent ? numericValue + URGENT_FEE : numericValue;
+  // Premium users get urgency for free; regular users pay URGENT_FEE
+  const finalValue   = isPremium ? numericValue : (urgent ? numericValue + URGENT_FEE : numericValue);
 
   const myServices = [...services].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -776,22 +781,35 @@ export default function SolicitacoesScreen() {
                   onNeighborhoodChange={setNeighborhood}
                 />
 
-                {/* Urgent toggle */}
-                <Pressable
-                  style={[styles.urgentToggle, urgent && styles.urgentToggleActive]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setUrgent(!urgent); }}
-                >
-                  <View style={[styles.urgentIconWrap, urgent && styles.urgentIconWrapActive]}>
-                    <Ionicons name="flash" size={20} color={urgent ? "#fff" : C.textTertiary} />
+                {/* Urgent toggle / Premium badge */}
+                {isPremium ? (
+                  <View style={styles.premiumUrgencyBadge}>
+                    <View style={styles.premiumUrgencyIconWrap}>
+                      <Ionicons name="flash" size={20} color="#FFD700" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.premiumUrgencyTitle}>Urgência Premium Ativada</Text>
+                      <Text style={styles.premiumUrgencySub}>Incluída no seu plano · Sem custo extra</Text>
+                    </View>
+                    <Ionicons name="checkmark-circle" size={22} color="#00E676" />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.urgentTitle}>Serviço Urgente</Text>
-                    <Text style={styles.urgentSub}>+R$ 10,00 adicionado ao valor</Text>
-                  </View>
-                  <View style={[styles.checkbox, urgent && styles.checkboxActive]}>
-                    {urgent && <Ionicons name="checkmark" size={14} color="#fff" />}
-                  </View>
-                </Pressable>
+                ) : (
+                  <Pressable
+                    style={[styles.urgentToggle, urgent && styles.urgentToggleActive]}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setUrgent(!urgent); }}
+                  >
+                    <View style={[styles.urgentIconWrap, urgent && styles.urgentIconWrapActive]}>
+                      <Ionicons name="flash" size={20} color={urgent ? "#fff" : C.textTertiary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.urgentTitle}>Serviço Urgente</Text>
+                      <Text style={styles.urgentSub}>+R$ 10,00 adicionado ao valor</Text>
+                    </View>
+                    <View style={[styles.checkbox, urgent && styles.checkboxActive]}>
+                      {urgent && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    </View>
+                  </Pressable>
+                )}
 
                 {/* Price summary */}
                 {numericValue > 0 && (
@@ -800,7 +818,15 @@ export default function SolicitacoesScreen() {
                       <Text style={styles.orderLabel}>Valor base</Text>
                       <Text style={styles.orderValue}>R$ {numericValue.toFixed(2)}</Text>
                     </View>
-                    {urgent && (
+                    {isPremium ? (
+                      <View style={styles.orderRow}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                          <Ionicons name="flash" size={13} color="#FFD700" />
+                          <Text style={[styles.orderLabel, { color: "#FFD700" }]}>Urgência Premium</Text>
+                        </View>
+                        <Text style={[styles.orderValue, { color: "#00E676" }]}>Grátis</Text>
+                      </View>
+                    ) : urgent ? (
                       <View style={styles.orderRow}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
                           <Ionicons name="flash" size={13} color={C.danger} />
@@ -808,7 +834,7 @@ export default function SolicitacoesScreen() {
                         </View>
                         <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
                       </View>
-                    )}
+                    ) : null}
                     <View style={[styles.orderRow, styles.orderTotal]}>
                       <Text style={styles.orderTotalLabel}>Total</Text>
                       <Text style={styles.orderTotalValue}>R$ {finalValue.toFixed(2)}</Text>
@@ -981,6 +1007,17 @@ const styles = StyleSheet.create({
   urgentIconWrapActive: { backgroundColor: C.danger },
   urgentTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: C.text },
   urgentSub: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary, marginTop: 2 },
+  premiumUrgencyBadge: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(255,215,0,0.07)", borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: "rgba(255,215,0,0.35)",
+  },
+  premiumUrgencyIconWrap: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: "rgba(255,215,0,0.18)", alignItems: "center", justifyContent: "center",
+  },
+  premiumUrgencyTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#FFD700" },
+  premiumUrgencySub: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#00E676", marginTop: 2 },
   checkbox: {
     width: 26, height: 26, borderRadius: 8, borderWidth: 2, borderColor: C.border,
     alignItems: "center", justifyContent: "center",

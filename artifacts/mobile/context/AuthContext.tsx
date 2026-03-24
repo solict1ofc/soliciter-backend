@@ -10,6 +10,7 @@ export type AuthUser = {
   name: string;
   email: string;
   cpf: string;
+  isPremium: boolean;
 };
 
 function useAuthContextValue() {

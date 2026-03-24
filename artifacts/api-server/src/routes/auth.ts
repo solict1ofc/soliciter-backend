@@ -40,9 +40,8 @@ router.post("/auth/register", async (req, res) => {
       return res.status(400).json({ error: "A senha deve ter ao menos 6 caracteres." });
     }
 
-    // Check uniqueness
     const [existing] = await db
-      .select({ id: usersTable.id, email: usersTable.email, cpf: usersTable.cpf })
+      .select({ id: usersTable.id })
       .from(usersTable)
       .where(eq(usersTable.email, normalEmail))
       .limit(1);
@@ -66,13 +65,19 @@ router.post("/auth/register", async (req, res) => {
     const [user] = await db
       .insert(usersTable)
       .values({ name: name.trim(), cpf: cleanCPF, email: normalEmail, passwordHash })
-      .returning({ id: usersTable.id, name: usersTable.name, email: usersTable.email, cpf: usersTable.cpf });
+      .returning({
+        id: usersTable.id,
+        name: usersTable.name,
+        email: usersTable.email,
+        cpf: usersTable.cpf,
+        isPremium: usersTable.isPremium,
+      });
 
     const token = signToken({ userId: user.id, email: user.email });
 
     res.status(201).json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, cpf: user.cpf },
+      user: { id: user.id, name: user.name, email: user.email, cpf: user.cpf, isPremium: user.isPremium },
     });
   } catch (error: any) {
     console.error("[auth/register]", error.message);
@@ -110,7 +115,7 @@ router.post("/auth/login", async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, name: user.name, email: user.email, cpf: user.cpf },
+      user: { id: user.id, name: user.name, email: user.email, cpf: user.cpf, isPremium: user.isPremium },
     });
   } catch (error: any) {
     console.error("[auth/login]", error.message);
@@ -128,7 +133,13 @@ router.get("/auth/me", async (req, res) => {
     if (!payload) return res.status(401).json({ error: "Token inválido ou expirado." });
 
     const [user] = await db
-      .select({ id: usersTable.id, name: usersTable.name, email: usersTable.email, cpf: usersTable.cpf })
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        email: usersTable.email,
+        cpf: usersTable.cpf,
+        isPremium: usersTable.isPremium,
+      })
       .from(usersTable)
       .where(eq(usersTable.id, payload.userId))
       .limit(1);

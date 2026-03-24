@@ -1,3 +1,5 @@
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { getUncachableStripeClient } from "../stripeClient";
 
@@ -10,25 +12,15 @@ function getApiBase(req: any): string {
 }
 
 const PLAN_CONFIG: Record<string, { name: string; amountInCents: number }> = {
-  basic: {
-    name: "Plano Básico SOLICITE",
-    amountInCents: 5900,
-  },
-  destaque: {
-    name: "Plano Destaque SOLICITE",
-    amountInCents: 7900,
-  },
-  premium: {
-    name: "Plano Premium SOLICITE",
-    amountInCents: 9900,
-  },
+  basic:    { name: "Plano Básico SOLICITE",    amountInCents: 5900 },
+  destaque: { name: "Plano Destaque SOLICITE",  amountInCents: 7900 },
+  premium:  { name: "Plano Premium SOLICITE",   amountInCents: 9900 },
 };
 
 // ── POST /api/criar-assinatura ─────────────────────────────────────────────────
-// Creates a Stripe Checkout Session (subscription mode) and returns the URL
 router.post("/criar-assinatura", async (req, res) => {
   try {
-    const { plan } = req.body as { plan: string };
+    const { plan, userId } = req.body as { plan: string; userId?: string | number };
     const config = PLAN_CONFIG[plan];
 
     if (!plan || !config) {
@@ -48,17 +40,17 @@ router.post("/criar-assinatura", async (req, res) => {
             recurring: { interval: "month" },
             product_data: {
               name: config.name,
-              description: "Assinatura mensal · Sem taxa de 10% da plataforma",
+              description: "Assinatura mensal · Urgência automática gratuita · Sem taxa de 10%",
             },
           },
           quantity: 1,
         },
       ],
       mode: "subscription",
-      success_url: `${apiBase}/api/subscription/success?plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${apiBase}/api/subscription/success?plan=${plan}&user_id=${userId ?? ""}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${apiBase}/api/subscription/cancel`,
       locale: "pt-BR",
-      metadata: { plan },
+      metadata: { plan, userId: userId?.toString() ?? "" },
     });
 
     res.json({ url: session.url });
@@ -69,8 +61,34 @@ router.post("/criar-assinatura", async (req, res) => {
 });
 
 // ── GET /api/subscription/success ─────────────────────────────────────────────
-// Stripe redirects here after successful subscription
-router.get("/subscription/success", (_req, res) => {
+// Stripe redirects here after successful subscription payment
+router.get("/subscription/success", async (req, res) => {
+  const { user_id, session_id } = req.query as Record<string, string>;
+
+  // Ativa isPremium no banco se tivermos o userId
+  if (user_id && !isNaN(parseInt(user_id))) {
+    try {
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(session_id ?? "").catch(() => null);
+
+      // Valida que a sessão realmente foi paga / subscription ativa
+      const isValid = !session || session.status === "complete" || session.mode === "subscription";
+
+      if (isValid) {
+        const expiresAt = new Date();
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+
+        await db
+          .update(usersTable)
+          .set({ isPremium: true, premiumExpiresAt: expiresAt })
+          .where(eq(usersTable.id, parseInt(user_id)))
+          .catch((e) => console.error("[subscription/success] db update error", e));
+      }
+    } catch (e) {
+      console.error("[subscription/success]", e);
+    }
+  }
+
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -97,6 +115,10 @@ router.get("/subscription/success", (_req, res) => {
       background: rgba(0,230,118,0.08); border: 1px solid rgba(0,230,118,0.3);
       border-radius: 12px; padding: 12px 20px; color: #00E676; font-size: 13px;
     }
+    .badge3 {
+      background: rgba(255,184,0,0.08); border: 1px solid rgba(255,184,0,0.3);
+      border-radius: 12px; padding: 12px 20px; color: #FFB800; font-size: 13px;
+    }
     .btn {
       background: #00D4FF; color: #000; border: none; border-radius: 14px;
       padding: 16px 40px; font-size: 17px; font-weight: 700; cursor: pointer;
@@ -108,15 +130,15 @@ router.get("/subscription/success", (_req, res) => {
   <div class="icon">🎉</div>
   <h1>Assinatura Ativada!</h1>
   <p>Seu plano foi ativado com sucesso.<br>Aproveite todos os benefícios da plataforma.</p>
-  <div class="badge">⚡ Taxa de 10% da plataforma removida</div>
-  <div class="badge2">✅ Assinatura renovada automaticamente todo mês</div>
+  <div class="badge">⚡ Urgência automática — sem custo adicional</div>
+  <div class="badge2">✅ Taxa de 10% removida</div>
+  <div class="badge3">🔄 Renovação automática mensal</div>
   <button class="btn" onclick="window.close()">Voltar ao App</button>
 </body>
 </html>`);
 });
 
 // ── GET /api/subscription/cancel ──────────────────────────────────────────────
-// Stripe redirects here when user cancels subscription checkout
 router.get("/subscription/cancel", (_req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
@@ -146,7 +168,7 @@ router.get("/subscription/cancel", (_req, res) => {
 <body>
   <div class="icon">↩️</div>
   <h1>Assinatura Não Concluída</h1>
-  <p>Você saiu antes de confirmar a assinatura.<br>Seu plano atual continua ativo — retorne ao app para tentar novamente.</p>
+  <p>Você saiu antes de confirmar a assinatura.<br>Retorne ao app para tentar novamente.</p>
   <button class="btn" onclick="window.close()">Voltar ao App</button>
 </body>
 </html>`);
