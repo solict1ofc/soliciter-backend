@@ -18,6 +18,7 @@ import Colors from "@/constants/colors";
 import { useApp } from "@/context/AppContext";
 import type { ProviderPlan } from "@/context/AppContext";
 import { SoliciteLogo } from "@/components/SoliciteLogo";
+import { useAuth } from "@/context/AuthContext";
 
 const C = Colors.dark;
 
@@ -116,6 +117,21 @@ type WithdrawMethod = "pix" | "bank";
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { provider, subscribePlan, pendingEarnings, withdrawEarnings } = useApp();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    Alert.alert("Sair da conta", "Tem certeza que deseja sair?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Sair",
+        style: "destructive",
+        onPress: () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          logout();
+        },
+      },
+    ]);
+  };
   const [selectedPlan, setSelectedPlan] = useState<PlanConfig | null>(null);
   const [subscribing, setSubscribing] = useState(false);
   const [withdrawModal, setWithdrawModal] = useState(false);
@@ -167,6 +183,22 @@ export default function ProfileScreen() {
       {/* ── App header bar ── */}
       <View style={styles.topBar}>
         <SoliciteLogo size="sm" />
+        <View style={{ flex: 1 }} />
+        {user && (
+          <View style={styles.userBadge}>
+            <Ionicons name="person-circle-outline" size={16} color={C.primary} />
+            <Text style={styles.userBadgeText} numberOfLines={1}>
+              {user.name.split(" ")[0]}
+            </Text>
+          </View>
+        )}
+        <Pressable
+          style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.75 }]}
+          onPress={handleLogout}
+          hitSlop={10}
+        >
+          <Ionicons name="log-out-outline" size={20} color={C.danger} />
+        </Pressable>
       </View>
 
       <ScrollView
@@ -651,6 +683,34 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: C.border,
+    gap: 10,
+  },
+  userBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(0,212,255,0.08)",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.2)",
+    maxWidth: 120,
+  },
+  userBadgeText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: C.primary,
+  },
+  logoutBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,59,92,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,59,92,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   profileCard: {
     margin: 16,

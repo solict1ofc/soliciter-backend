@@ -7,7 +7,7 @@ import {
 } from "@expo-google-fonts/inter";
 import { Ionicons } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { ActivityIndicator, View, Text, StyleSheet, Image } from "react-native";
@@ -17,6 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppContextProvider, useApp } from "@/context/AppContext";
+import { AuthContextProvider, useAuth } from "@/context/AuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { useServiceNotifications } from "@/hooks/useNotifications";
 
@@ -31,24 +32,70 @@ function NotificationWatcher() {
   return null;
 }
 
+// ── Auth navigation guard ──────────────────────────────────────────────────────
+function AuthGuard() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+
+  useEffect(() => {
+    if (loading) return;
+
+    const inAuthGroup = segments[0] === "(auth)";
+
+    if (!user && !inAuthGroup) {
+      router.replace("/(auth)/login");
+    } else if (user && inAuthGroup) {
+      router.replace("/(tabs)");
+    }
+  }, [user, loading, segments]);
+
+  return null;
+}
+
 function RootLayoutNav() {
+  const { loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={splash.container}>
+        <View style={splash.ring1} />
+        <View style={splash.ring2} />
+        <View style={splash.logoBox}>
+          <Image
+            source={require("../assets/images/logo.jpeg")}
+            style={splash.logoImage}
+            resizeMode="cover"
+          />
+        </View>
+        <Text style={splash.brand}>SOLICITE</Text>
+        <Text style={splash.tagline}>Serviços sob demanda</Text>
+        <View style={splash.loadingBar}>
+          <View style={splash.loadingFill} />
+        </View>
+        <Text style={splash.loadingText}>Verificando sessão...</Text>
+      </View>
+    );
+  }
+
   return (
-    <Stack screenOptions={{ headerBackTitle: "Voltar" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen
-        name="chat/[id]"
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="provider-register"
-        options={{
-          headerShown: false,
-          presentation: "card",
-        }}
-      />
-    </Stack>
+    <AppContextProvider>
+      <NotificationProvider>
+        <NotificationWatcher />
+        <GestureHandlerRootView>
+          <KeyboardProvider>
+            <Stack screenOptions={{ headerBackTitle: "Voltar" }}>
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+              <Stack.Screen
+                name="provider-register"
+                options={{ headerShown: false, presentation: "card" }}
+              />
+            </Stack>
+          </KeyboardProvider>
+        </GestureHandlerRootView>
+      </NotificationProvider>
+    </AppContextProvider>
   );
 }
 
@@ -67,11 +114,8 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) {
     return (
       <View style={splash.container}>
-        {/* Glow rings */}
         <View style={splash.ring1} />
         <View style={splash.ring2} />
-
-        {/* Logo principal — foto das mãos */}
         <View style={splash.logoBox}>
           <Image
             source={require("../assets/images/logo.jpeg")}
@@ -79,12 +123,8 @@ export default function RootLayout() {
             resizeMode="cover"
           />
         </View>
-
-        {/* Nome do app */}
         <Text style={splash.brand}>SOLICITE</Text>
         <Text style={splash.tagline}>Serviços sob demanda</Text>
-
-        {/* Barra de carregamento */}
         <View style={splash.loadingBar}>
           <View style={splash.loadingFill} />
         </View>
@@ -97,16 +137,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <AppContextProvider>
-            <NotificationProvider>
-              <NotificationWatcher />
-              <GestureHandlerRootView>
-                <KeyboardProvider>
-                  <RootLayoutNav />
-                </KeyboardProvider>
-              </GestureHandlerRootView>
-            </NotificationProvider>
-          </AppContextProvider>
+          <AuthContextProvider>
+            <AuthGuard />
+            <RootLayoutNav />
+          </AuthContextProvider>
         </QueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
@@ -121,7 +155,6 @@ const splash = StyleSheet.create({
     justifyContent: "center",
     gap: 20,
   },
-  // Anéis de brilho atrás da logo
   ring1: {
     position: "absolute",
     width: 300,
@@ -140,7 +173,6 @@ const splash = StyleSheet.create({
     borderColor: "rgba(0,212,255,0.25)",
     backgroundColor: "transparent",
   },
-  // Moldura da logo
   logoBox: {
     width: 180,
     height: 180,
@@ -157,23 +189,9 @@ const splash = StyleSheet.create({
     borderWidth: 3,
     borderColor: "rgba(0,212,255,0.5)",
   },
-  logoImage: {
-    width: 180,
-    height: 180,
-  },
-  brand: {
-    fontSize: 40,
-    fontWeight: "800",
-    color: "#FFFFFF",
-    letterSpacing: 6,
-    marginTop: 4,
-  },
-  tagline: {
-    fontSize: 15,
-    color: "#A0A0B8",
-    letterSpacing: 1,
-  },
-  // Barra de progresso
+  logoImage: { width: 180, height: 180 },
+  brand: { fontSize: 40, fontWeight: "800", color: "#FFFFFF", letterSpacing: 6, marginTop: 4 },
+  tagline: { fontSize: 15, color: "#A0A0B8", letterSpacing: 1 },
   loadingBar: {
     width: 160,
     height: 3,
@@ -182,15 +200,6 @@ const splash = StyleSheet.create({
     marginTop: 8,
     overflow: "hidden",
   },
-  loadingFill: {
-    width: "60%",
-    height: "100%",
-    backgroundColor: "#00D4FF",
-    borderRadius: 2,
-  },
-  loadingText: {
-    fontSize: 12,
-    color: "rgba(160,160,184,0.6)",
-    letterSpacing: 1,
-  },
+  loadingFill: { width: "60%", height: "100%", backgroundColor: "#00D4FF", borderRadius: 2 },
+  loadingText: { fontSize: 12, color: "rgba(160,160,184,0.6)", letterSpacing: 1 },
 });

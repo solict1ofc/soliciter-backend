@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import createContextHook from "@nkzw/create-context-hook";
 import React, { useCallback, useEffect, useState } from "react";
 
+import { useAuth } from "@/context/AuthContext";
+
 export type ServiceStatus =
   | "pending_payment"
   | "available"
@@ -64,22 +66,17 @@ export type ProviderProfile = {
   planExpiresAt?: string;
   activeServiceId?: string;
   completedJobs: number;
-  /** Saldo disponível para saque (liberado após cliente confirmar) */
   earnings: number;
-  /** Total histórico sacado */
   withdrawn: number;
   registered: boolean;
   registration?: ProviderRegistration;
 };
 
-const SERVICES_KEY = "servicosapp_services_v2";
-const PROVIDER_KEY = "servicosapp_provider_v3";
-
 export const URGENT_FEE = 10;
 export const PLATFORM_FEE_RATE = 0.1;
 
-const defaultProvider: ProviderProfile = {
-  id: "provider_1",
+const makeDefaultProvider = (userId: string): ProviderProfile => ({
+  id: `provider_${userId}`,
   name: "",
   rating: 0,
   totalRatings: 0,
@@ -89,7 +86,7 @@ const defaultProvider: ProviderProfile = {
   earnings: 0,
   withdrawn: 0,
   registered: false,
-};
+});
 
 /** Calcula o ganho líquido do prestador em um serviço */
 export function calcProviderEarning(service: Service, plan: ProviderPlan): number {
@@ -98,45 +95,60 @@ export function calcProviderEarning(service: Service, plan: ProviderPlan): numbe
 }
 
 function useAppContextValue() {
+  const { user } = useAuth();
+
+  // Storage keys scoped to the logged-in user — each user sees only their own data
+  const userId = user?.id?.toString() ?? "guest";
+  const SERVICES_KEY = `servicosapp_services_v2_${userId}`;
+  const PROVIDER_KEY = `servicosapp_provider_v3_${userId}`;
+
   const [services, setServices] = useState<Service[]>([]);
-  const [provider, setProvider] = useState<ProviderProfile>(defaultProvider);
+  const [provider, setProvider] = useState<ProviderProfile>(makeDefaultProvider(userId));
   const [loading, setLoading] = useState(true);
 
+  // Reload data whenever the logged-in user changes (login / logout)
   useEffect(() => {
     loadData();
-  }, []);
+  }, [userId]);
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const [servicesJson, providerJson] = await Promise.all([
         AsyncStorage.getItem(SERVICES_KEY),
         AsyncStorage.getItem(PROVIDER_KEY),
       ]);
-      if (servicesJson) setServices(JSON.parse(servicesJson));
+      setServices(servicesJson ? JSON.parse(servicesJson) : []);
       if (providerJson) {
         const saved = JSON.parse(providerJson) as ProviderProfile;
-        // Migrate: ensure withdrawn field exists
         setProvider({ withdrawn: 0, ...saved });
+      } else {
+        setProvider(makeDefaultProvider(userId));
       }
-    } catch (e) {
+    } catch {
       // silent
     } finally {
       setLoading(false);
     }
   };
 
-  const saveServices = useCallback(async (updated: Service[]) => {
-    setServices(updated);
-    await AsyncStorage.setItem(SERVICES_KEY, JSON.stringify(updated));
-  }, []);
+  const saveServices = useCallback(
+    async (updated: Service[]) => {
+      setServices(updated);
+      await AsyncStorage.setItem(SERVICES_KEY, JSON.stringify(updated));
+    },
+    [SERVICES_KEY]
+  );
 
-  const saveProvider = useCallback(async (updated: ProviderProfile) => {
-    setProvider(updated);
-    await AsyncStorage.setItem(PROVIDER_KEY, JSON.stringify(updated));
-  }, []);
+  const saveProvider = useCallback(
+    async (updated: ProviderProfile) => {
+      setProvider(updated);
+      await AsyncStorage.setItem(PROVIDER_KEY, JSON.stringify(updated));
+    },
+    [PROVIDER_KEY]
+  );
 
   // ─── Saldo pendente (em custódia) ─────────────────────────────────────────
-  // Calculado dinamicamente: serviços aceitos/em andamento/concluídos aguardando confirmação
   const pendingEarnings = services
     .filter(
       (s) =>
@@ -176,7 +188,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // ─── 2. Cliente paga → available (valor retido na plataforma) ─────────────
+  // ─── 2. Cliente paga → available ──────────────────────────────────────────
   const confirmPayment = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -187,7 +199,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // ─── 3. Prestador aceita → accepted (valor vai para saldo pendente) ────────
+  // ─── 3. Prestador aceita → accepted ───────────────────────────────────────
   const acceptService = useCallback(
     async (serviceId: string) => {
       if (provider.activeServiceId) return false;
@@ -225,7 +237,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // ─── 5. Prestador finaliza → completed (aguardando confirmação do cliente) ─
+  // ─── 5. Prestador finaliza → completed ────────────────────────────────────
   const finalizeService = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
@@ -242,8 +254,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // ─── 6. Cliente efetua pagamento (avaliação opcional) → rated ──────────────
-  // Só aqui o valor sai da custódia e vai para saldo DISPONÍVEL do prestador
+  // ─── 6. Cliente confirma e avalia → rated ─────────────────────────────────
   const confirmAndRate = useCallback(
     async (serviceId: string, rating: number) => {
       const service = services.find((s) => s.id === serviceId);
@@ -252,7 +263,6 @@ function useAppContextValue() {
       const providerEarning = calcProviderEarning(service, provider.plan);
       const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
 
-      // Só atualiza a avaliação e média se o cliente de fato avaliou
       const hasRating = rating > 0;
       const totalRatings = hasRating ? provider.totalRatings + 1 : provider.totalRatings;
       const newRating = hasRating
@@ -264,7 +274,6 @@ function useAppContextValue() {
           ? {
               ...s,
               status: "rated" as ServiceStatus,
-              // só persiste clientRating se foi de fato dado
               ...(hasRating ? { clientRating: rating } : {}),
               ratedAt: new Date().toISOString(),
             }
@@ -272,12 +281,10 @@ function useAppContextValue() {
       );
       await saveServices(updated);
 
-      // Libera o valor: sai da custódia (pendente) e entra no saldo disponível
       await saveProvider({
         ...provider,
         activeServiceId: undefined,
         completedJobs: provider.completedJobs + 1,
-        // earnings = saldo disponível para saque
         earnings: provider.earnings + providerEarning,
         rating: Math.round(newRating * 10) / 10,
         totalRatings,
@@ -301,12 +308,10 @@ function useAppContextValue() {
           ? {
               ...s,
               chatMessages: [...(s.chatMessages ?? []), msg],
-              unreadClient: senderId === "provider"
-                ? (s.unreadClient ?? 0) + 1
-                : (s.unreadClient ?? 0),
-              unreadProvider: senderId === "client"
-                ? (s.unreadProvider ?? 0) + 1
-                : (s.unreadProvider ?? 0),
+              unreadClient:
+                senderId === "provider" ? (s.unreadClient ?? 0) + 1 : (s.unreadClient ?? 0),
+              unreadProvider:
+                senderId === "client" ? (s.unreadProvider ?? 0) + 1 : (s.unreadProvider ?? 0),
             }
           : s
       );
@@ -342,10 +347,7 @@ function useAppContextValue() {
 
   const registerProvider = useCallback(
     async (data: Omit<ProviderRegistration, "registeredAt">) => {
-      const registration: ProviderRegistration = {
-        ...data,
-        registeredAt: new Date().toISOString(),
-      };
+      const registration: ProviderRegistration = { ...data, registeredAt: new Date().toISOString() };
       await saveProvider({
         ...provider,
         name: data.fullName,
@@ -356,7 +358,6 @@ function useAppContextValue() {
     [provider, saveProvider]
   );
 
-  // ─── Saque: move do saldo disponível para histórico de saques ─────────────
   const withdrawEarnings = useCallback(
     async (amount: number) => {
       if (amount > provider.earnings) return false;
