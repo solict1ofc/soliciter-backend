@@ -1,0 +1,56 @@
+Preciso implementar duas melhorias importantes no meu aplicativo: uma área de SAC (Suporte ao Cliente) e a correção do fluxo de pagamento do Plano Premium via Pix.
+
+1) IMPLEMENTAÇÃO DE SAC (SUPORTE AO CLIENTE)
+
+Atualmente, o aplicativo possui funcionalidades de pagamento via Pix e solicitação de saque, porém não existe nenhum canal de suporte para o usuário em caso de erro ou dúvida. Isso está prejudicando a experiência do usuário.
+
+Preciso que seja implementado:
+
+- Criar uma tela de “Suporte” ou “Ajuda”, acessível pelo menu principal
+- Adicionar um botão de contato via WhatsApp:
+  - Ao clicar, deve abrir o WhatsApp com uma mensagem automática:
+    "Olá, preciso de ajuda com o aplicativo."
+- (Opcional, mas recomendado) Criar um formulário com:
+  - Nome do usuário
+  - Descrição do problema
+  - Botão "Enviar"
+  - Os dados devem ser enviados para o backend ou salvos no banco
+- Criar uma seção de FAQ com perguntas como:
+  - Como funciona o pagamento?
+  - Como solicitar saque?
+  - Como cancelar uma solicitação?
+
+A área deve ser simples, funcional e acessível, principalmente nas telas de pagamento e saque.
+
+---
+
+2) CORREÇÃO DO PAGAMENTO DO PLANO PREMIUM (PIX)
+
+O botão de assinatura do Plano Premium (R$ 99/mês) não está funcionando corretamente.
+
+Problema:
+Ao clicar no botão, o app não gera nem exibe o QR Code do Pix.
+
+Preciso que seja implementado o fluxo completo:
+
+- Ao clicar no botão, fazer requisição para o backend para criar um pagamento Pix (ex: via Mercado Pago)
+- O backend deve retornar:
+  - QR Code (base64)
+  - Código Pix copia e cola
+- O app deve abrir uma nova tela contendo:
+  - QR Code para pagamento
+  - Código copia e cola
+  - Botão de cancelar pagamento
+- Garantir que o pagamento seja identificado automaticamente após a confirmação
+- Remover o texto "Em breve" do botão e ativar a funcionalidade real
+
+---
+
+OBJETIVO FINAL:
+
+Melhorar a experiência do usuário, permitir suporte rápido em caso de erro e garantir que o pagamento da assinatura funcione corretamente via Pix.
+
+Prioridade:
+
+1. Botão de pagamento funcionando
+2. Botão de suporte via WhatsApp

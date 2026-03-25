@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -24,6 +26,43 @@ import { SoliciteLogo } from "@/components/SoliciteLogo";
 import { useAuth } from "@/context/AuthContext";
 
 const C = Colors.dark;
+
+// ─── SAC ─────────────────────────────────────────────────────────────────────
+const WHATSAPP_NUMBER = "5562999999999"; // Substitua pelo número real
+
+const FAQ_ITEMS = [
+  {
+    id: "pagamento",
+    q: "Como funciona o pagamento?",
+    a: "O cliente gera um QR Code PIX e paga antes do serviço começar. O valor fica retido na plataforma e é liberado ao prestador somente depois que o cliente confirmar a conclusão do serviço.",
+  },
+  {
+    id: "saque",
+    q: "Como solicitar saque?",
+    a: "Na aba Perfil, acesse sua carteira e clique em 'Sacar Ganhos'. Informe o valor (mínimo R$ 10) e a chave PIX ou dados bancários. O saque é processado em até 2 dias úteis.",
+  },
+  {
+    id: "cancelar",
+    q: "Como cancelar uma solicitação?",
+    a: "Na tela de pagamento PIX, toque em 'Cancelar solicitação'. Se o PIX ainda não foi pago, ele será invalidado automaticamente. Se o pagamento já foi confirmado, entre em contato com o suporte.",
+  },
+  {
+    id: "taxa",
+    q: "O que é a taxa de plataforma?",
+    a: "Prestadores no plano Gratuito pagam 10% sobre cada serviço concluído. Assinando um plano pago (Básico, Destaque ou Premium), essa taxa é zerada.",
+  },
+  {
+    id: "plano",
+    q: "Como assinar um plano?",
+    a: "Na aba Perfil, role até 'Planos de Assinatura' e escolha o plano desejado. Clique em 'Assinar agora' e pague via PIX. O plano é ativado assim que o pagamento for confirmado.",
+  },
+];
+
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL ??
+  `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StarDisplay({ rating, size = 16 }: { rating: number; size?: number }) {
   return (
@@ -187,6 +226,31 @@ export default function ProfileScreen() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
 
+  // ─── Plano PIX payment ──────────────────────────────────────────────────────
+  type PlanPixData = { paymentId: string; qrCode: string; pixCode: string; isTestMode: boolean };
+  const [planPixData, setPlanPixData]             = useState<PlanPixData | null>(null);
+  const [planPixCopied, setPlanPixCopied]         = useState(false);
+  const [planPixChecking, setPlanPixChecking]     = useState(false);
+  const [planPixExpiresAt, setPlanPixExpiresAt]   = useState<number | null>(null);
+  const [planPixSecondsLeft, setPlanPixSecondsLeft] = useState(600);
+  const [planPixPendingKey, setPlanPixPendingKey] = useState<ProviderPlan | null>(null);
+  const [planPixActivating, setPlanPixActivating] = useState(false);
+  const [planPixInlineMsg, setPlanPixInlineMsg]   = useState<{
+    type: "error" | "warning" | "info"; text: string;
+  } | null>(null);
+  const [planPixCancelVisible, setPlanPixCancelVisible] = useState(false);
+  const [planPixCancelling, setPlanPixCancelling] = useState(false);
+  const [planPixServiceId, setPlanPixServiceId]   = useState<string | null>(null);
+  const planPixPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const planPixExpiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─── SAC state ──────────────────────────────────────────────────────────────
+  const [faqOpen, setFaqOpen]         = useState<Record<string, boolean>>({});
+  const [sacName, setSacName]         = useState("");
+  const [sacMsg, setSacMsg]           = useState("");
+  const [sacSent, setSacSent]         = useState(false);
+  const [sacSending, setSacSending]   = useState(false);
+
   const resetWithdrawForm = () => {
     setPixKey("");
     setBankHolder(""); setBankCPF(""); setBankName("");
@@ -202,9 +266,145 @@ export default function ProfileScreen() {
     return !!(bankHolder.trim() && bankCPF.trim() && bankName.trim() && bankAgency.trim() && bankAccount.trim());
   };
 
-  const handleSubscribe = (_plan: PlanConfig) => {
-    Alert.alert("Em breve", "Os planos estarão disponíveis na próxima versão do SOLICITE. Obrigado pela paciência!");
+  // ─── Assinar plano via PIX ───────────────────────────────────────────────────
+  const handleSubscribe = async (plan: PlanConfig) => {
     setSelectedPlan(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const subId = `plan-${plan.key}-${user?.id ?? "u"}-${Date.now()}`;
+    try {
+      const res = await fetch(`${API_BASE}/payment/create-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId: subId,
+          amountInCents: (plan.promoPrice ?? plan.price) * 100,
+          title: `Assinatura ${plan.name} — SOLICITE`,
+          userEmail: user?.email || "prestador@solicite.app",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha ao gerar PIX");
+      setPlanPixData(data);
+      setPlanPixServiceId(subId);
+      setPlanPixPendingKey(plan.key as ProviderPlan);
+      setPlanPixExpiresAt(Date.now() + 10 * 60 * 1000);
+      setPlanPixInlineMsg(null);
+    } catch (err: any) {
+      Alert.alert("Erro ao gerar pagamento", err.message ?? "Tente novamente.");
+    }
+  };
+
+  // ─── Poll pagamento do plano ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (!planPixData || !planPixServiceId) return;
+    const activateAndClose = async () => {
+      if (planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; }
+      setPlanPixActivating(true);
+      try {
+        if (planPixPendingKey) await activatePlan(planPixPendingKey);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setPlanPixData(null); setPlanPixServiceId(null);
+        setPlanPixPendingKey(null); setPlanPixExpiresAt(null);
+        setPlanPixInlineMsg({ type: "info", text: "Plano ativado com sucesso!" });
+      } finally { setPlanPixActivating(false); }
+    };
+
+    planPixPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/payment/status/${planPixServiceId}`);
+        if (!res.ok) return;
+        const { status } = await res.json();
+        if (status === "retained" || status === "paid") {
+          await activateAndClose();
+        } else if (status === "cancelled" || status === "rejected" || status === "refunded") {
+          if (planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; }
+          setPlanPixInlineMsg({ type: "error", text: "PIX recusado ou cancelado. Tente novamente." });
+        }
+      } catch {}
+    }, 4000);
+
+    return () => { if (planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; } };
+  }, [planPixData, planPixServiceId]);
+
+  // ─── Countdown expiração QR do plano ────────────────────────────────────────
+  useEffect(() => {
+    if (!planPixExpiresAt) { setPlanPixSecondsLeft(600); return; }
+    const tick = () => {
+      const left = Math.max(0, Math.round((planPixExpiresAt - Date.now()) / 1000));
+      setPlanPixSecondsLeft(left);
+      if (left === 0 && planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; }
+    };
+    tick();
+    planPixExpiryRef.current = setInterval(tick, 1000);
+    return () => { if (planPixExpiryRef.current) { clearInterval(planPixExpiryRef.current); planPixExpiryRef.current = null; } };
+  }, [planPixExpiresAt]);
+
+  // ─── Verificar manualmente pagamento do plano ─────────────────────────────
+  const handleCheckPlanPayment = async () => {
+    if (!planPixServiceId || planPixChecking) return;
+    setPlanPixChecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/payment/status/${planPixServiceId}`);
+      const { status } = await res.json();
+      if (status === "retained" || status === "paid") {
+        if (planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; }
+        setPlanPixActivating(true);
+        try {
+          if (planPixPendingKey) await activatePlan(planPixPendingKey);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setPlanPixData(null); setPlanPixServiceId(null);
+          setPlanPixPendingKey(null); setPlanPixExpiresAt(null);
+          setPlanPixInlineMsg({ type: "info", text: "Plano ativado com sucesso!" });
+        } finally { setPlanPixActivating(false); }
+      } else if (status === "cancelled" || status === "rejected" || status === "refunded") {
+        if (planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; }
+        setPlanPixInlineMsg({ type: "error", text: "PIX recusado ou cancelado. Cancele e tente novamente." });
+      } else {
+        setPlanPixInlineMsg({ type: "warning", text: "Pagamento ainda não identificado. Aguarde alguns segundos." });
+      }
+    } catch {
+      setPlanPixInlineMsg({ type: "error", text: "Erro de conexão. Verifique sua internet." });
+    } finally { setPlanPixChecking(false); }
+  };
+
+  // ─── Cancelar pagamento do plano ─────────────────────────────────────────
+  const confirmCancelPlanPix = async () => {
+    setPlanPixCancelVisible(false);
+    setPlanPixCancelling(true);
+    try {
+      if (planPixPollRef.current) { clearInterval(planPixPollRef.current); planPixPollRef.current = null; }
+      if (planPixExpiryRef.current) { clearInterval(planPixExpiryRef.current); planPixExpiryRef.current = null; }
+      if (planPixServiceId) {
+        await fetch(`${API_BASE}/payment/cancel/${planPixServiceId}`, { method: "POST" }).catch(() => {});
+      }
+      setPlanPixData(null); setPlanPixServiceId(null);
+      setPlanPixPendingKey(null); setPlanPixExpiresAt(null);
+      setPlanPixInlineMsg(null);
+    } finally { setPlanPixCancelling(false); }
+  };
+
+  // ─── SAC: abrir WhatsApp ─────────────────────────────────────────────────
+  const openWhatsApp = () => {
+    const msg = encodeURIComponent("Olá, preciso de ajuda com o aplicativo SOLICITE.");
+    Linking.openURL(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`).catch(() => {
+      Alert.alert("WhatsApp não encontrado", "Instale o WhatsApp e tente novamente.");
+    });
+  };
+
+  // ─── SAC: enviar formulário ──────────────────────────────────────────────
+  const handleSacSend = async () => {
+    if (!sacName.trim() || !sacMsg.trim()) return;
+    setSacSending(true);
+    try {
+      await fetch(`${API_BASE}/support/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: sacName.trim(), message: sacMsg.trim(), userId: user?.id }),
+      }).catch(() => {});
+      setSacSent(true);
+      setSacName(""); setSacMsg("");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } finally { setSacSending(false); }
   };
 
   const currentPlan = plans.find((p) => p.key === provider.plan);
@@ -533,6 +733,108 @@ export default function ProfileScreen() {
             </Text>
           </View>
         )}
+
+        {/* ── SEÇÃO SAC / SUPORTE ── */}
+        <View style={styles.section}>
+          <View style={styles.sacHeaderRow}>
+            <Ionicons name="headset-outline" size={20} color={C.primary} />
+            <Text style={styles.sectionTitle}>Suporte / Ajuda</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>
+            Tire dúvidas, fale conosco ou consulte as perguntas frequentes.
+          </Text>
+        </View>
+
+        {/* WhatsApp */}
+        <Pressable
+          style={({ pressed }) => [styles.whatsappBtn, pressed && { opacity: 0.85 }]}
+          onPress={openWhatsApp}
+        >
+          <Ionicons name="logo-whatsapp" size={22} color="#fff" />
+          <Text style={styles.whatsappBtnText}>Falar no WhatsApp</Text>
+        </Pressable>
+
+        {/* FAQ */}
+        <View style={[styles.card, { marginTop: 4 }]}>
+          <View style={styles.faqHeader}>
+            <Ionicons name="help-circle-outline" size={18} color={C.primary} />
+            <Text style={styles.faqTitle}>Perguntas Frequentes</Text>
+          </View>
+          {FAQ_ITEMS.map((item, idx) => (
+            <View key={item.id}>
+              {idx > 0 && <View style={styles.faqDivider} />}
+              <Pressable
+                style={styles.faqRow}
+                onPress={() => setFaqOpen((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
+              >
+                <Text style={styles.faqQ}>{item.q}</Text>
+                <Ionicons
+                  name={faqOpen[item.id] ? "chevron-up-outline" : "chevron-down-outline"}
+                  size={16}
+                  color={C.textSecondary}
+                />
+              </Pressable>
+              {faqOpen[item.id] && (
+                <Text style={styles.faqA}>{item.a}</Text>
+              )}
+            </View>
+          ))}
+        </View>
+
+        {/* Formulário de contato */}
+        <View style={[styles.card, { marginTop: 4 }]}>
+          <View style={styles.faqHeader}>
+            <Ionicons name="mail-outline" size={18} color={C.primary} />
+            <Text style={styles.faqTitle}>Enviar Mensagem</Text>
+          </View>
+          {sacSent ? (
+            <View style={styles.sacSentBox}>
+              <Ionicons name="checkmark-circle-outline" size={36} color={C.success} />
+              <Text style={styles.sacSentTitle}>Mensagem enviada!</Text>
+              <Text style={styles.sacSentSub}>Retornaremos em até 24 horas.</Text>
+              <Pressable onPress={() => setSacSent(false)} style={styles.sacSentBtn}>
+                <Text style={styles.sacSentBtnText}>Enviar outra</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                style={styles.input}
+                placeholder="Seu nome"
+                placeholderTextColor={C.textMuted}
+                value={sacName}
+                onChangeText={setSacName}
+              />
+              <TextInput
+                style={[styles.input, { height: 90, textAlignVertical: "top" }]}
+                placeholder="Descreva o problema ou dúvida…"
+                placeholderTextColor={C.textMuted}
+                value={sacMsg}
+                onChangeText={setSacMsg}
+                multiline
+                numberOfLines={4}
+              />
+              <Pressable
+                style={({ pressed }) => [
+                  styles.sacSendBtn,
+                  (!sacName.trim() || !sacMsg.trim()) && { opacity: 0.45 },
+                  pressed && { opacity: 0.8 },
+                ]}
+                onPress={handleSacSend}
+                disabled={!sacName.trim() || !sacMsg.trim() || sacSending}
+              >
+                {sacSending ? (
+                  <ActivityIndicator color="#000" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="send-outline" size={16} color="#000" />
+                    <Text style={styles.sacSendBtnText}>Enviar</Text>
+                  </>
+                )}
+              </Pressable>
+            </>
+          )}
+        </View>
 
         {/* ── FERRAMENTAS DE TESTE (dev only) ── */}
         {__DEV__ && (
@@ -886,8 +1188,9 @@ export default function ProfileScreen() {
                 ]}
                 onPress={() => handleSubscribe(selectedPlan)}
               >
+                <Ionicons name="qr-code-outline" size={18} color="#000" />
                 <Text style={styles.modalSubscribeText}>
-                  Em breve — R$ {selectedPlan.promoPrice ?? selectedPlan.price},00/mês
+                  Assinar via PIX — R$ {selectedPlan.promoPrice ?? selectedPlan.price},00/mês
                 </Text>
               </Pressable>
             </View>
@@ -940,6 +1243,191 @@ export default function ProfileScreen() {
               >
                 <Ionicons name="log-out-outline" size={18} color="#fff" />
                 <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" }}>Sair</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── MODAL PIX ASSINATURA ── */}
+      <Modal
+        visible={planPixData !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPlanPixCancelVisible(true)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Pressable style={styles.modalClose} onPress={() => setPlanPixCancelVisible(true)}>
+              <Ionicons name="close-outline" size={20} color={C.textSecondary} />
+            </Pressable>
+
+            <Text style={styles.modalTitle}>Pagamento via PIX</Text>
+
+            {/* Plan name */}
+            {planPixPendingKey && (() => {
+              const plan = plans.find((p) => p.key === planPixPendingKey);
+              return plan ? (
+                <View style={[styles.escrowBadge, { backgroundColor: plan.bgColor, borderColor: plan.borderColor, borderWidth: 1 }]}>
+                  <Ionicons name="diamond-outline" size={14} color={plan.color} />
+                  <Text style={[styles.escrowText, { color: plan.color }]}>
+                    {plan.name} — R$ {(plan.promoPrice ?? plan.price).toFixed(2)}/mês
+                  </Text>
+                </View>
+              ) : null;
+            })()}
+
+            {/* Countdown */}
+            {planPixSecondsLeft > 0 ? (
+              <View style={[styles.pollingBadge, {
+                backgroundColor: planPixSecondsLeft <= 60 ? "rgba(255,59,92,0.12)" : "rgba(0,212,255,0.08)",
+              }]}>
+                <Ionicons name="timer-outline" size={14} color={planPixSecondsLeft <= 60 ? C.danger : C.primary} />
+                <Text style={[styles.pollingText, { color: planPixSecondsLeft <= 60 ? C.danger : C.primary }]}>
+                  QR expira em {Math.floor(planPixSecondsLeft / 60)}:{String(planPixSecondsLeft % 60).padStart(2, "0")}
+                </Text>
+              </View>
+            ) : (
+              <View style={[styles.escrowBadge, { backgroundColor: "rgba(255,59,92,0.12)" }]}>
+                <Ionicons name="close-circle-outline" size={14} color={C.danger} />
+                <Text style={[styles.escrowText, { color: C.danger }]}>QR Code expirado — cancele e tente novamente.</Text>
+              </View>
+            )}
+
+            {/* Inline message */}
+            {planPixInlineMsg && (
+              <View style={[styles.escrowBadge, {
+                backgroundColor:
+                  planPixInlineMsg.type === "error"   ? "rgba(255,59,92,0.12)" :
+                  planPixInlineMsg.type === "warning" ? "rgba(255,184,0,0.12)" : "rgba(0,212,255,0.08)",
+              }]}>
+                <Ionicons
+                  name={planPixInlineMsg.type === "error" ? "alert-circle-outline" : planPixInlineMsg.type === "warning" ? "warning-outline" : "checkmark-circle-outline"}
+                  size={14}
+                  color={planPixInlineMsg.type === "error" ? C.danger : planPixInlineMsg.type === "warning" ? C.warning : C.success}
+                />
+                <Text style={[styles.escrowText, {
+                  color: planPixInlineMsg.type === "error" ? C.danger : planPixInlineMsg.type === "warning" ? C.warning : C.success,
+                }]}>{planPixInlineMsg.text}</Text>
+              </View>
+            )}
+
+            {/* QR Code */}
+            {planPixData?.qrCode ? (
+              <View style={[styles.qrWrapper, planPixSecondsLeft === 0 && { opacity: 0.4 }]}>
+                <Image
+                  source={{ uri: `data:image/png;base64,${planPixData.qrCode}` }}
+                  style={styles.qrImage}
+                  resizeMode="contain"
+                />
+                <Text style={styles.qrHint}>Escaneie com o app do seu banco</Text>
+              </View>
+            ) : null}
+
+            {/* Copy code */}
+            {planPixData && (
+              <Pressable
+                style={[styles.copyCodeBtn, planPixSecondsLeft === 0 && { opacity: 0.4 }]}
+                disabled={planPixSecondsLeft === 0}
+                onPress={async () => {
+                  await Clipboard.setStringAsync(planPixData.pixCode);
+                  setPlanPixCopied(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setTimeout(() => setPlanPixCopied(false), 3000);
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.copyCodeLabel}>Código Pix Copia e Cola</Text>
+                  <Text style={styles.copyCodeValue} numberOfLines={2}>
+                    {planPixData.pixCode.slice(0, 60)}...
+                  </Text>
+                </View>
+                <View style={styles.copyIconWrap}>
+                  <Ionicons name={planPixCopied ? "checkmark" : "copy-outline"} size={18} color={planPixCopied ? C.success : C.primary} />
+                </View>
+              </Pressable>
+            )}
+
+            {/* Polling badge */}
+            {planPixSecondsLeft > 0 && (
+              <View style={styles.pollingBadge}>
+                <ActivityIndicator size="small" color={C.primary} />
+                <Text style={styles.pollingText}>Aguardando confirmação do pagamento…</Text>
+              </View>
+            )}
+
+            {/* Check button */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.subscribeCtaBtn,
+                { backgroundColor: C.primary },
+                pressed && { opacity: 0.85 },
+                (planPixChecking || planPixSecondsLeft === 0 || planPixActivating) && { opacity: 0.5 },
+              ]}
+              onPress={handleCheckPlanPayment}
+              disabled={planPixChecking || planPixSecondsLeft === 0 || planPixActivating}
+            >
+              {planPixChecking || planPixActivating ? (
+                <ActivityIndicator color="#000" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+                  <Text style={[styles.subscribeCtaText, { color: "#000" }]}>Já paguei — Verificar</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Text style={[styles.planModalSubtitle, { textAlign: "center", marginTop: 4 }]}>
+              O plano é ativado automaticamente após a confirmação do pagamento.
+            </Text>
+
+            {/* Cancel */}
+            <Pressable
+              style={[styles.sacSendBtn, { backgroundColor: "transparent", borderWidth: 1, borderColor: C.danger }]}
+              onPress={() => setPlanPixCancelVisible(true)}
+              disabled={planPixCancelling}
+            >
+              {planPixCancelling ? (
+                <ActivityIndicator color={C.danger} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="close-circle-outline" size={16} color={C.danger} />
+                  <Text style={[styles.sacSendBtnText, { color: C.danger }]}>Cancelar pagamento</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── MODAL CONFIRMAR CANCELAMENTO DO PLANO PIX ── */}
+      <Modal
+        visible={planPixCancelVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPlanPixCancelVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { justifyContent: "center" }]}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="close-circle-outline" size={44} color={C.danger} />
+            </View>
+            <Text style={styles.confirmTitle}>Cancelar pagamento?</Text>
+            <Text style={styles.confirmDesc}>
+              O QR Code PIX será invalidado e o plano não será ativado.
+            </Text>
+            <View style={styles.confirmBtns}>
+              <Pressable
+                style={[styles.confirmBtn, styles.confirmBtnGhost]}
+                onPress={() => setPlanPixCancelVisible(false)}
+              >
+                <Text style={[styles.confirmBtnText, { color: C.textSecondary }]}>Voltar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: C.danger }]}
+                onPress={confirmCancelPlanPix}
+              >
+                <Text style={[styles.confirmBtnText, { color: "#fff" }]}>Sim, cancelar</Text>
               </Pressable>
             </View>
           </View>
@@ -1361,7 +1849,10 @@ const styles = StyleSheet.create({
   modalSubscribeButton: {
     borderRadius: 14,
     paddingVertical: 16,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
     marginTop: 8,
   },
   modalSubscribeText: {
@@ -1659,4 +2150,162 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: C.textMuted,
   },
+
+  // ── Generic card / input ────────────────────────────────────────────────────
+  card: {
+    backgroundColor: C.surface,
+    borderRadius: 18,
+    padding: 16,
+    marginHorizontal: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    gap: 10,
+  },
+  input: {
+    backgroundColor: C.backgroundTertiary,
+    borderWidth: 1,
+    borderColor: C.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: C.text,
+    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+  },
+
+  // ── PIX payment ─────────────────────────────────────────────────────────────
+  escrowBadge: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "rgba(255,184,0,0.08)",
+    borderRadius: 10, padding: 10,
+  },
+  escrowText: {
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.warning, flex: 1, lineHeight: 18,
+  },
+  pollingBadge: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(0,212,255,0.06)",
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  pollingText: {
+    fontSize: 12, fontFamily: "Inter_400Regular", color: C.primary, flex: 1,
+  },
+  qrWrapper: { alignItems: "center", gap: 8, paddingVertical: 4 },
+  qrImage: { width: 200, height: 200, borderRadius: 12 },
+  qrHint: {
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, textAlign: "center",
+  },
+  copyCodeBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: C.backgroundTertiary,
+    borderWidth: 1, borderColor: C.border,
+    borderRadius: 12, padding: 12,
+  },
+  copyCodeLabel: {
+    fontSize: 11, fontFamily: "Inter_600SemiBold",
+    color: C.textTertiary, textTransform: "uppercase", letterSpacing: 0.6,
+  },
+  copyCodeValue: {
+    fontSize: 12, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, marginTop: 2,
+  },
+  copyIconWrap: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: C.surface,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: C.border,
+  },
+  subscribeCtaBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, borderRadius: 14, paddingVertical: 15,
+  },
+
+  // ── SAC section ─────────────────────────────────────────────────────────────
+  sacHeaderRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+  },
+  whatsappBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 10, backgroundColor: "#25D366", borderRadius: 14,
+    paddingVertical: 14, marginHorizontal: 16,
+  },
+  whatsappBtnText: {
+    fontSize: 15, fontFamily: "Inter_700Bold", color: "#fff",
+  },
+  faqHeader: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4,
+  },
+  faqTitle: {
+    fontSize: 15, fontFamily: "Inter_700Bold", color: C.text,
+  },
+  faqDivider: {
+    height: 1, backgroundColor: C.border, marginVertical: 4,
+  },
+  faqRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 10, gap: 8,
+  },
+  faqQ: {
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.text, flex: 1, lineHeight: 20,
+  },
+  faqA: {
+    fontSize: 13, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, lineHeight: 20,
+    paddingBottom: 8, paddingLeft: 2,
+  },
+  sacSentBox: {
+    alignItems: "center", paddingVertical: 16, gap: 8,
+  },
+  sacSentTitle: {
+    fontSize: 17, fontFamily: "Inter_700Bold", color: C.success,
+  },
+  sacSentSub: {
+    fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary,
+  },
+  sacSentBtn: {
+    marginTop: 4, paddingHorizontal: 20, paddingVertical: 10,
+    borderRadius: 10, borderWidth: 1, borderColor: C.border,
+  },
+  sacSentBtnText: {
+    fontSize: 14, fontFamily: "Inter_600SemiBold", color: C.textSecondary,
+  },
+  sacSendBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 8, backgroundColor: C.primary, borderRadius: 12, paddingVertical: 13,
+  },
+  sacSendBtnText: {
+    fontSize: 15, fontFamily: "Inter_700Bold", color: "#000",
+  },
+
+  // ── Confirm modal ────────────────────────────────────────────────────────────
+  confirmCard: {
+    backgroundColor: C.surface, borderRadius: 24, padding: 28,
+    marginHorizontal: 24, alignItems: "center", gap: 12,
+    borderWidth: 1, borderColor: C.border,
+  },
+  confirmIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: "rgba(255,59,92,0.12)",
+    alignItems: "center", justifyContent: "center", marginBottom: 4,
+  },
+  confirmTitle: {
+    fontSize: 20, fontFamily: "Inter_700Bold", color: C.text, textAlign: "center",
+  },
+  confirmDesc: {
+    fontSize: 14, fontFamily: "Inter_400Regular",
+    color: C.textSecondary, textAlign: "center", lineHeight: 20,
+  },
+  confirmBtns: {
+    flexDirection: "row", gap: 12, marginTop: 8, width: "100%",
+  },
+  confirmBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+  },
+  confirmBtnGhost: {
+    backgroundColor: C.backgroundTertiary, borderWidth: 1, borderColor: C.border,
+  },
+  confirmBtnText: { fontSize: 15, fontFamily: "Inter_700Bold" },
 });

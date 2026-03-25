@@ -5,6 +5,7 @@ import healthRouter   from "./health";
 import paymentRouter  from "./payment";
 import webhookRouter  from "./pix";       // webhook-only; payment logic is in payment.ts
 import serviceRouter  from "./service";
+import supportRouter  from "./support";   // POST /support/contact
 import withdrawRouter from "./withdraw";  // POST /sacar
 
 const router: IRouter = Router();
@@ -16,5 +17,6 @@ router.use(webhookRouter);   // POST /webhook (Mercado Pago notifications)
 router.use(serviceRouter);
 router.use(adminRouter);     // GET|PUT /admin/payouts (requires ADMIN_SECRET)
 router.use(withdrawRouter);  // POST /sacar
+router.use(supportRouter);   // POST /support/contact
 
 export default router;
