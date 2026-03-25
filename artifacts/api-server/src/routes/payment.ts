@@ -283,6 +283,78 @@ router.post("/payment/release/:serviceId", async (req, res) => {
   }
 });
 
+// ── POST /api/payment/cancel/:serviceId ───────────────────────────────────────
+// Cancela um pagamento PIX ainda pendente (não pode cancelar se já aprovado).
+router.post("/payment/cancel/:serviceId", async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+
+    const [payment] = await db
+      .select()
+      .from(servicePaymentsTable)
+      .where(eq(servicePaymentsTable.serviceId, serviceId))
+      .limit(1);
+
+    if (!payment) {
+      return res.status(404).json({ error: "Pagamento não encontrado." });
+    }
+
+    // Já cancelado — idempotente
+    if (payment.status === "cancelled") {
+      return res.json({ ok: true, alreadyCancelled: true });
+    }
+
+    // Pago/retido/liberado — não pode cancelar
+    if (
+      payment.status === "retained" ||
+      payment.status === "released" ||
+      payment.status === "paid"
+    ) {
+      return res.status(409).json({
+        error: "Este pagamento já foi confirmado e não pode ser cancelado.",
+        status: payment.status,
+      });
+    }
+
+    // Tenta cancelar no Mercado Pago
+    if (payment.paymentId) {
+      try {
+        const client = getMpClient();
+        const mpPayment = new Payment(client);
+        await mpPayment.update({
+          id: parseInt(payment.paymentId),
+          body: { status: "cancelled" },
+          requestOptions: { idempotencyKey: `cancel-${payment.paymentId}` },
+        } as any);
+        logger.info(
+          { serviceId, paymentId: payment.paymentId },
+          "[payment/cancel] Pagamento cancelado no Mercado Pago"
+        );
+      } catch (mpErr: any) {
+        // QR expirado ou já cancelado no MP — prossegue com cancelamento local
+        logger.warn(
+          { serviceId, paymentId: payment.paymentId, err: mpErr?.message },
+          "[payment/cancel] Falha ao cancelar no MP — marcando como cancelado localmente"
+        );
+      }
+    }
+
+    // Marca como cancelado no banco
+    await db
+      .update(servicePaymentsTable)
+      .set({ status: "cancelled" })
+      .where(eq(servicePaymentsTable.serviceId, serviceId));
+
+    logger.info({ serviceId }, "[payment/cancel] Solicitação cancelada");
+    return res.json({ ok: true });
+  } catch (error: any) {
+    logger.error({ err: error?.message }, "[payment/cancel] Erro");
+    return res.status(500).json({
+      error: error.message || "Erro ao cancelar pagamento.",
+    });
+  }
+});
+
 // ── Aliases de URL curta ──────────────────────────────────────────────────────
 // POST /api/create-payment → mesmo que POST /api/payment/create-payment
 router.post("/create-payment", (req, res, next) => {

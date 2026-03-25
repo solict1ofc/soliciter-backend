@@ -386,6 +386,21 @@ export default function SolicitacoesScreen() {
   const [pixChecking, setPixChecking]           = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Cancel confirmation modal
+  const [cancelConfirmVisible, setCancelConfirmVisible] = useState(false);
+  const [cancelling, setCancelling]                     = useState(false);
+
+  // QR code expiration countdown (10 min)
+  const [pixExpiresAt, setPixExpiresAt]     = useState<number | null>(null);
+  const [pixSecondsLeft, setPixSecondsLeft] = useState(600);
+  const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Inline payment messages (replacing Alert.alert)
+  const [paymentInlineMsg, setPaymentInlineMsg] = useState<{
+    type: "error" | "warning" | "info";
+    text: string;
+  } | null>(null);
+
   // Rating/confirm modal
   const [ratingService, setRatingService] = useState<Service | null>(null);
   const [confirming, setConfirming]       = useState(false);
@@ -423,11 +438,10 @@ export default function SolicitacoesScreen() {
         } else if (status === "cancelled" || status === "rejected" || status === "refunded") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
-          Alert.alert(
-            "Pagamento não aprovado",
-            "O PIX foi recusado ou cancelado. Tente novamente ou use outro método.",
-            [{ text: "OK", onPress: () => { setFormStep("form"); setPixData(null); setPendingServiceId(null); } }]
-          );
+          setPaymentInlineMsg({
+            type: "error",
+            text: "O PIX foi recusado ou cancelado. Por favor, cancele a solicitação e tente novamente.",
+          });
         }
       } catch {}
     }, 4000);
@@ -436,6 +450,28 @@ export default function SolicitacoesScreen() {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     };
   }, [formStep, pendingServiceId]);
+
+  // ─── Countdown de expiração do QR Code ────────────────────────────────────
+  useEffect(() => {
+    if (!pixExpiresAt) {
+      if (expiryRef.current) { clearInterval(expiryRef.current); expiryRef.current = null; }
+      setPixSecondsLeft(600);
+      return;
+    }
+    const tick = () => {
+      const left = Math.max(0, Math.round((pixExpiresAt - Date.now()) / 1000));
+      setPixSecondsLeft(left);
+      if (left === 0) {
+        if (expiryRef.current) { clearInterval(expiryRef.current); expiryRef.current = null; }
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      }
+    };
+    tick();
+    expiryRef.current = setInterval(tick, 1000);
+    return () => {
+      if (expiryRef.current) { clearInterval(expiryRef.current); expiryRef.current = null; }
+    };
+  }, [pixExpiresAt]);
 
   // ─── Create service → payment ──────────────────────────────────────────────
   const handleCreate = async () => {
@@ -462,6 +498,8 @@ export default function SolicitacoesScreen() {
       const pix = await createPayment(newService.id, amountInCents, title.trim());
       setPixData(pix);
       setPendingServiceId(newService.id);
+      setPixExpiresAt(Date.now() + 10 * 60 * 1000); // 10 minutes
+      setPaymentInlineMsg(null);
       setFormStep("payment");
     } catch (err: any) {
       Alert.alert("Erro ao criar pagamento", err?.message ?? "Tente novamente.");
@@ -484,47 +522,59 @@ export default function SolicitacoesScreen() {
         await confirmPayment(pendingServiceId);
         setPendingServiceId(null);
         setPixData(null);
+        setPixExpiresAt(null);
+        setPaymentInlineMsg(null);
         setFormStep("success");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else if (status === "cancelled" || status === "rejected" || status === "refunded") {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-        Alert.alert(
-          "Pagamento não aprovado",
-          "O PIX foi recusado ou cancelado. Tente criar uma nova solicitação.",
-          [{ text: "OK", onPress: () => { setFormStep("form"); setPixData(null); setPendingServiceId(null); } }]
-        );
+        setPaymentInlineMsg({
+          type: "error",
+          text: "O PIX foi recusado ou cancelado. Cancele a solicitação para tentar novamente.",
+        });
       } else {
-        Alert.alert(
-          "Aguardando pagamento",
-          "O pagamento ainda não foi identificado pelo Mercado Pago. Pague o PIX e tente novamente em alguns segundos."
-        );
+        setPaymentInlineMsg({
+          type: "warning",
+          text: "Pagamento ainda não identificado. Aguarde alguns segundos e tente novamente.",
+        });
       }
     } catch {
-      Alert.alert("Erro de conexão", "Não foi possível verificar o pagamento. Verifique sua internet.");
+      setPaymentInlineMsg({
+        type: "error",
+        text: "Erro de conexão. Verifique sua internet e tente novamente.",
+      });
     } finally {
       setPixChecking(false);
     }
   };
 
-  // ─── Cancelar pagamento pendente ───────────────────────────────────────────
+  // ─── Cancelar pagamento pendente (abre modal de confirmação) ───────────────
   const handleCancelPayment = () => {
-    Alert.alert(
-      "Cancelar pagamento",
-      "O serviço será removido. Tem certeza?",
-      [
-        { text: "Não", style: "cancel" },
-        {
-          text: "Sim, cancelar",
-          style: "destructive",
-          onPress: async () => {
-            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-            if (pendingServiceId) await cancelPendingService(pendingServiceId);
-            setPixData(null); setPendingServiceId(null);
-            setFormStep("form");
-          },
-        },
-      ]
-    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCancelConfirmVisible(true);
+  };
+
+  // ─── Confirma o cancelamento (chamado pelo modal) ──────────────────────────
+  const confirmCancelPayment = async () => {
+    setCancelConfirmVisible(false);
+    setCancelling(true);
+    try {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      if (expiryRef.current) { clearInterval(expiryRef.current); expiryRef.current = null; }
+      if (pendingServiceId) {
+        // Cancela no Mercado Pago + banco (best-effort)
+        await fetch(`${API_BASE}/payment/cancel/${pendingServiceId}`, { method: "POST" })
+          .catch(() => {});
+        await cancelPendingService(pendingServiceId);
+      }
+      setPixData(null);
+      setPendingServiceId(null);
+      setPixExpiresAt(null);
+      setPaymentInlineMsg(null);
+      setFormStep("form");
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const handleConfirmAndRate = async (rating: number) => {
@@ -717,9 +767,68 @@ export default function SolicitacoesScreen() {
                   )}
                 </Text>
 
+                {/* Countdown / expirado */}
+                {pixSecondsLeft > 0 ? (
+                  <View style={[styles.pollingBadge, {
+                    backgroundColor: pixSecondsLeft <= 60 ? "rgba(255,59,92,0.12)" : "rgba(0,212,255,0.08)",
+                    marginBottom: 8,
+                  }]}>
+                    <Ionicons
+                      name="timer-outline"
+                      size={14}
+                      color={pixSecondsLeft <= 60 ? C.danger : C.primary}
+                    />
+                    <Text style={[styles.pollingText, {
+                      color: pixSecondsLeft <= 60 ? C.danger : C.primary,
+                    }]}>
+                      QR Code expira em {Math.floor(pixSecondsLeft / 60)}:{String(pixSecondsLeft % 60).padStart(2, "0")}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.escrowBadge, { backgroundColor: "rgba(255,59,92,0.12)", marginBottom: 8 }]}>
+                    <Ionicons name="close-circle-outline" size={16} color={C.danger} />
+                    <Text style={[styles.escrowText, { color: C.danger }]}>
+                      QR Code expirado — cancele e gere uma nova solicitação.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Inline status message */}
+                {paymentInlineMsg && (
+                  <View style={[styles.escrowBadge, {
+                    backgroundColor:
+                      paymentInlineMsg.type === "error"   ? "rgba(255,59,92,0.12)" :
+                      paymentInlineMsg.type === "warning" ? "rgba(255,184,0,0.12)" :
+                      "rgba(0,212,255,0.08)",
+                    marginBottom: 8,
+                  }]}>
+                    <Ionicons
+                      name={
+                        paymentInlineMsg.type === "error"   ? "alert-circle-outline" :
+                        paymentInlineMsg.type === "warning" ? "warning-outline" :
+                        "information-circle-outline"
+                      }
+                      size={16}
+                      color={
+                        paymentInlineMsg.type === "error"   ? C.danger :
+                        paymentInlineMsg.type === "warning" ? C.warning :
+                        C.primary
+                      }
+                    />
+                    <Text style={[styles.escrowText, {
+                      color:
+                        paymentInlineMsg.type === "error"   ? C.danger :
+                        paymentInlineMsg.type === "warning" ? C.warning :
+                        C.primary,
+                    }]}>
+                      {paymentInlineMsg.text}
+                    </Text>
+                  </View>
+                )}
+
                 {/* QR Code */}
                 {pixData.qrCode ? (
-                  <View style={styles.qrWrapper}>
+                  <View style={[styles.qrWrapper, pixSecondsLeft === 0 && { opacity: 0.4 }]}>
                     <Image
                       source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
                       style={styles.qrImage}
@@ -738,7 +847,8 @@ export default function SolicitacoesScreen() {
 
                 {/* Copy code */}
                 <Pressable
-                  style={styles.copyCodeBtn}
+                  style={[styles.copyCodeBtn, pixSecondsLeft === 0 && { opacity: 0.4 }]}
+                  disabled={pixSecondsLeft === 0}
                   onPress={async () => {
                     await Clipboard.setStringAsync(pixData.pixCode);
                     setPixCopied(true);
@@ -761,21 +871,27 @@ export default function SolicitacoesScreen() {
                   </View>
                 </Pressable>
 
-                {/* Polling indicator */}
-                <View style={styles.pollingBadge}>
-                  <ActivityIndicator size="small" color={C.primary} />
-                  <Text style={styles.pollingText}>
-                    {pixData.isTestMode
-                      ? "Modo teste — confirmando automaticamente..."
-                      : "Aguardando confirmação do pagamento..."}
-                  </Text>
-                </View>
+                {/* Polling indicator — oculto quando expirado */}
+                {pixSecondsLeft > 0 && (
+                  <View style={styles.pollingBadge}>
+                    <ActivityIndicator size="small" color={C.primary} />
+                    <Text style={styles.pollingText}>
+                      {pixData.isTestMode
+                        ? "Modo teste — confirmando automaticamente..."
+                        : "Aguardando confirmação do pagamento..."}
+                    </Text>
+                  </View>
+                )}
 
                 {/* Manual check button */}
                 <Pressable
-                  style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [
+                    styles.payBtn,
+                    pressed && { opacity: 0.85 },
+                    (pixChecking || pixSecondsLeft === 0) && { opacity: 0.5 },
+                  ]}
                   onPress={handleCheckPayment}
-                  disabled={pixChecking}
+                  disabled={pixChecking || pixSecondsLeft === 0}
                 >
                   {pixChecking ? (
                     <ActivityIndicator color="#000" size="small" />
@@ -792,9 +908,19 @@ export default function SolicitacoesScreen() {
                 </Text>
 
                 {/* Cancel */}
-                <Pressable onPress={handleCancelPayment} style={styles.ghostBtn}>
-                  <Ionicons name="close-circle-outline" size={16} color={C.danger} />
-                  <Text style={[styles.ghostBtnText, { color: C.danger }]}>Cancelar solicitação</Text>
+                <Pressable
+                  onPress={handleCancelPayment}
+                  style={[styles.ghostBtn, cancelling && { opacity: 0.5 }]}
+                  disabled={cancelling}
+                >
+                  {cancelling ? (
+                    <ActivityIndicator size="small" color={C.danger} />
+                  ) : (
+                    <>
+                      <Ionicons name="close-circle-outline" size={16} color={C.danger} />
+                      <Text style={[styles.ghostBtnText, { color: C.danger }]}>Cancelar solicitação</Text>
+                    </>
+                  )}
                 </Pressable>
               </View>
             )}
@@ -859,6 +985,41 @@ export default function SolicitacoesScreen() {
               done={confirmDone}
             />
           )}
+        </View>
+      </Modal>
+
+      {/* ── Modal de confirmação de cancelamento PIX ── */}
+      <Modal
+        visible={cancelConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCancelConfirmVisible(false)}
+      >
+        <View style={[styles.modalOverlay, { justifyContent: "center" }]}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="close-circle-outline" size={44} color={C.danger} />
+            </View>
+            <Text style={styles.confirmTitle}>Cancelar solicitação?</Text>
+            <Text style={styles.confirmDesc}>
+              O QR Code PIX será invalidado e a solicitação removida.{"\n"}
+              Esta ação não pode ser desfeita.
+            </Text>
+            <View style={styles.confirmBtns}>
+              <Pressable
+                style={[styles.confirmBtn, styles.confirmBtnGhost]}
+                onPress={() => setCancelConfirmVisible(false)}
+              >
+                <Text style={[styles.confirmBtnText, { color: C.textSecondary }]}>Voltar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: C.danger }]}
+                onPress={confirmCancelPayment}
+              >
+                <Text style={[styles.confirmBtnText, { color: "#fff" }]}>Sim, cancelar</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </Modal>
     </KeyboardAvoidingView>
@@ -1190,4 +1351,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   unreadBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#fff" },
+
+  // ── Cancel confirmation modal ─────────────────────────────────────────────
+  confirmCard: {
+    backgroundColor: C.surface,
+    borderRadius: 24,
+    padding: 28,
+    marginHorizontal: 24,
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  confirmIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: "rgba(255,59,92,0.12)",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 4,
+  },
+  confirmTitle: {
+    fontSize: 20, fontFamily: "Inter_700Bold", color: C.text, textAlign: "center",
+  },
+  confirmDesc: {
+    fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary,
+    textAlign: "center", lineHeight: 20,
+  },
+  confirmBtns: {
+    flexDirection: "row", gap: 12, marginTop: 8, width: "100%",
+  },
+  confirmBtn: {
+    flex: 1, paddingVertical: 14, borderRadius: 14,
+    alignItems: "center", justifyContent: "center",
+  },
+  confirmBtnGhost: {
+    backgroundColor: C.backgroundTertiary, borderWidth: 1, borderColor: C.border,
+  },
+  confirmBtnText: { fontSize: 15, fontFamily: "Inter_700Bold" },
 });
