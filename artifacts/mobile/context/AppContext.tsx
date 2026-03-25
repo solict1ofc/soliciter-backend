@@ -128,8 +128,7 @@ function useAppContextValue() {
       } else {
         setProvider(makeDefaultProvider(userId));
       }
-      // After loading, reconcile any pending payments with Stripe DB
-      // This handles: app restart after payment, web redirect flow
+      // Reconcile pending payments on startup (handles app restart after Pix payment)
       if (userId !== "guest") {
         syncPendingPayments(loaded, SERVICES_KEY);
       }
@@ -141,8 +140,8 @@ function useAppContextValue() {
   };
 
   /**
-   * syncPendingPayments — called on startup to reconcile local state with Stripe DB.
-   * Finds services stuck in "pending_payment" and checks if Stripe already confirmed them.
+   * syncPendingPayments — called on startup to reconcile local state with payment DB.
+   * Finds services stuck in "pending_payment" and checks if Mercado Pago confirmed them.
    * Updates local state automatically if paid — no user action needed.
    */
   const syncPendingPayments = async (currentServices: Service[], storageKey: string) => {
@@ -400,48 +399,6 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  const subscribePlan = useCallback(
-    async (plan: ProviderPlan): Promise<string | null> => {
-      try {
-        const endpoint = `${API_BASE}/criar-assinatura`;
-        console.log(`[subscribePlan] Iniciando assinatura: plano="${plan}" userId=${user?.id}`);
-        console.log(`[subscribePlan] Endpoint: POST ${endpoint}`);
-
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan, userId: user?.id }),
-        });
-
-        console.log(`[subscribePlan] Resposta HTTP: ${res.status}`);
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          const errMsg = data.error ?? `Erro HTTP ${res.status}`;
-          console.error(`[subscribePlan] ERRO do servidor: ${errMsg}`);
-          throw new Error(errMsg);
-        }
-
-        const body = await res.json();
-        console.log(`[subscribePlan] Body da resposta:`, JSON.stringify(body));
-
-        const { url } = body;
-        if (!url) {
-          console.error("[subscribePlan] URL de checkout ausente na resposta");
-          throw new Error("URL de checkout inválida — contate o suporte.");
-        }
-
-        console.log(`[subscribePlan] URL de checkout obtida com sucesso: ${url.substring(0, 60)}...`);
-        return url as string;
-      } catch (err: any) {
-        console.error("[subscribePlan] ERRO capturado:", err.message);
-        Alert.alert("Erro na assinatura", err.message ?? "Tente novamente.");
-        return null;
-      }
-    },
-    [user]
-  );
-
   const activatePlan = useCallback(
     async (plan: ProviderPlan) => {
       const expiresAt = new Date();
@@ -497,7 +454,6 @@ function useAppContextValue() {
     confirmAndRate,
     sendMessage,
     markChatRead,
-    subscribePlan,
     activatePlan,
     registerProvider,
     withdrawEarnings,

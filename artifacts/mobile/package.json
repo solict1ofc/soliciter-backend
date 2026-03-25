@@ -58,6 +58,7 @@
     "@expo/vector-icons": "^15.0.3",
     "@nkzw/create-context-hook": "^1.1.0",
     "expo-av": "^16.0.8",
+    "expo-clipboard": "^8.0.8",
     "expo-notifications": "^0.32.16",
     "react-native-haptic-feedback": "^2.3.4"
   }

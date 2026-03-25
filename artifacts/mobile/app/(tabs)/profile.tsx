@@ -1,13 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -119,10 +117,10 @@ type WithdrawMethod = "pix" | "bank";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { provider, subscribePlan, activatePlan, pendingEarnings, withdrawEarnings } = useApp();
+  const { provider, activatePlan, pendingEarnings, withdrawEarnings } = useApp();
   const { user, logout, refreshUser } = useAuth();
 
-  // Refresh isPremium every time this tab is focused (e.g. after returning from Stripe web)
+  // Refresh isPremium every time this tab is focused
   useFocusEffect(
     useCallback(() => {
       refreshUser();
@@ -176,30 +174,11 @@ export default function ProfileScreen() {
   };
 
   const handleSubscribe = async (plan: PlanConfig) => {
-    if (subscribing) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSubscribing(true);
-    try {
-      const url = await subscribePlan(plan.key);
-      if (!url) return;
-
-      if (Platform.OS === "web") {
-        // Web: redireciona para o Stripe — volta via success_url
-        window.location.href = url;
-      } else {
-        // Native: abre browser in-app, aguarda fechar, depois sincroniza status do DB
-        await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
-        // Sync isPremium from DB (Stripe success_url already updated it)
-        await refreshUser();
-        // Also update local provider plan for display purposes
-        await activatePlan(plan.key);
-      }
-    } catch (err: any) {
-      Alert.alert("Erro na assinatura", err.message ?? "Tente novamente.");
-    } finally {
-      setSubscribing(false);
-      setSelectedPlan(null);
-    }
+    Alert.alert(
+      "Em breve via Pix",
+      "As assinaturas estão sendo migradas para pagamento via Mercado Pago (Pix). Em breve você poderá assinar sem sair do app!",
+      [{ text: "Entendi", onPress: () => setSelectedPlan(null) }]
+    );
   };
 
   const currentPlan = plans.find((p) => p.key === provider.plan);

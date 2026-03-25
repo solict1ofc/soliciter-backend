@@ -96,78 +96,38 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 Expo React Native app — "SOLICITE" services marketplace. Dark tech design (cyan/navy palette).
 - 4 tabs: Solicitations, Global marketplace, Provider area, Profile
 - Service lifecycle: `pending_payment → available → accepted → in_progress → completed → rated`
-- **Stripe Checkout payment flow**: mobile calls backend to create Stripe Checkout Session, opens browser, polls status after browser closes
+- **Mercado Pago Pix payment flow**: mobile calls backend to create Pix payment, shows QR Code inline, polls status automatically
 - Key files: `app/(tabs)/index.tsx` (client flow), `app/(tabs)/global.tsx` (marketplace), `app/(tabs)/provider.tsx` (provider), `context/AppContext.tsx`
 - Chat available after service is accepted
 - AsyncStorage keys: `servicosapp_services_v2` (services), `servicosapp_provider_v3` (provider)
 - `EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN` — used to construct API URL: `https://${EXPO_PUBLIC_DOMAIN}/api`
 
-### Stripe Payment Integration
+### Mercado Pago Pix Payment Integration
 
-End-to-end Stripe Checkout payment flow for the SOLICITE app:
+End-to-end Pix payment flow using Mercado Pago SDK v2:
 
-- **DB table**: `service_payments` (`service_id`, `session_id`, `amount`, `status`, `created_at`, `paid_at`)
+- **DB table**: `service_payments` (`service_id`, `payment_id`, `amount`, `status`, `pix_code`, `created_at`, `paid_at`)
 - **Backend** (`artifacts/api-server/src/`):
-  - `stripeClient.ts` — gets Stripe credentials from Replit Stripe connector
-  - `routes/payment.ts` — 4 endpoints: `POST /api/payment/create-checkout`, `GET /api/payment/status/:serviceId`, `GET /api/payment/success`, `GET /api/payment/cancel`
-  - `app.ts` — webhook route at `/api/stripe/webhook` (BEFORE express.json middleware)
+  - `routes/payment.ts` — 2 endpoints:
+    - `POST /api/payment/create-payment` — creates Pix payment via MP API; returns `{ paymentId, qrCode, pixCode }`
+    - `GET /api/payment/status/:serviceId` — checks DB status; if still pending, verifies live with MP API
+  - `app.ts` — webhook at `POST /api/payment/webhook` — receives MP notifications, fetches payment status, updates DB on `approved`
 - **Mobile flow** (`artifacts/mobile/app/(tabs)/index.tsx`):
   1. User fills service form → creates service with `pending_payment` status
-  2. Payment screen shows "Pagar com Stripe" button
-  3. App calls `POST /api/payment/create-checkout` → gets checkout URL
-  4. Opens Stripe Checkout in browser via `expo-web-browser`
-  5. User pays → Stripe redirects to `/api/payment/success` → DB updated to `paid`
-  6. After browser closes, app polls `/api/payment/status/:serviceId` for up to 8 seconds
-  7. If `paid`, `confirmPayment()` is called → service becomes `available` in marketplace
+  2. Payment step shows "Gerar QR Code Pix" button
+  3. App calls `POST /api/payment/create-payment` → gets QR code (base64) + copy-paste code
+  4. QR code displayed inline — user scans in their banking app
+  5. Auto-polls `/api/payment/status/:serviceId` every 3 seconds
+  6. MP webhook fires `approved` → DB updated to `paid`
+  7. On `paid` status, `confirmPayment()` called → service becomes `available` in marketplace
+  8. "Já Paguei" button for manual verification
 - **Platform fee**: 10% only for "free" plan providers; waived for basic/destaque/premium
-- **Escrow model**: client pays upfront, funds held in platform until service completion
+- **Escrow model**: client pays upfront via Pix, funds held in platform until service completion
+- **Env var**: `MERCADO_PAGO_ACCESS_TOKEN` — required in both dev and production
 
-### Subscription Payment (Plano Assinatura)
+### Subscription Plans (Plano Assinatura)
 
-Stripe Checkout subscription flow for provider plans:
-
-- **Backend** (`artifacts/api-server/src/routes/subscription.ts`):
-  - `POST /api/criar-assinatura` — receives `{ plan, userId }`, creates Stripe Checkout Session with `mode: "subscription"` and `recurring: { interval: "month" }`, returns `{ url }`. `userId` is embedded in `success_url` so the DB can be updated on Stripe redirect.
-  - `GET /api/subscription/success` — success redirect page; updates `users.isPremium=true` and `premiumExpiresAt=+1 month` in DB using `user_id` from query string; validates Stripe session status before writing
-  - `GET /api/subscription/cancel` — cancel redirect page
-  - Plan prices: basic R$59 (5900), destaque R$79 (7900), premium R$99 (9900) in cents
-- **Mobile flow** (`artifacts/mobile/app/(tabs)/profile.tsx`):
-  1. Provider selects a plan → confirmation alert
-  2. `subscribePlan(plan)` calls `POST /api/criar-assinatura` → gets checkout URL
-  3. Opens Stripe Checkout in browser via `expo-web-browser` (native) or `window.location.href` (web)
-  4. After browser closes (native): `refreshUser()` syncs `isPremium` from DB, then `activatePlan()` updates local provider display state
-  5. Profile tab also calls `refreshUser()` on every focus (via `useFocusEffect`) to keep `isPremium` in sync
-
-### Stripe Webhook Security
-
-The webhook at `POST /api/stripe/webhook` handles 3 event types:
-- `checkout.session.completed` (mode=payment) → marks service_payments as paid
-- `checkout.session.completed` (mode=subscription) → activates isPremium for 30 days
-- `invoice.payment_succeeded` → renews isPremium on monthly subscription renewal
-
-**Signature verification logic:**
-- With `STRIPE_WEBHOOK_SECRET` set: uses `stripe.webhooks.constructEvent()` to cryptographically verify the Stripe signature — tamper-proof
-- Without secret in production: rejects webhook with 400 (security enforced)
-- Without secret in development: accepts with a warning log (convenience for local dev)
-
-**To configure in production (Render):**
-1. Stripe Dashboard → Developers → Webhooks → Add endpoint
-2. URL: `https://YOUR-SERVICE.onrender.com/api/stripe/webhook`
-3. Events: `checkout.session.completed`, `invoice.payment_succeeded`
-4. Copy the signing secret (`whsec_...`)
-5. Add as `STRIPE_WEBHOOK_SECRET` env var in Render (or Replit Secrets)
-
-**Note:** Even without webhooks, payment confirmation is reliable via:
-- `success_url` handler: verifies with Stripe API on redirect
-- `GET /api/payment/status/:id`: verifies live with Stripe if DB shows pending
-
-### Production URL Resolution (`getApiBase`)
-
-Both `payment.ts` and `subscription.ts` use `getApiBase(req)` which resolves the server's public URL in priority order:
-1. `APP_URL` env var (manual override for any platform)
-2. `REPLIT_DOMAINS` (Replit development/hosting)
-3. `RENDER_EXTERNAL_URL` (auto-set by Render)
-4. Derived from `x-forwarded-proto` + `x-forwarded-host` request headers (works behind any proxy)
+Provider plan selection UI exists in `profile.tsx`. Payment via Pix is pending implementation. Plans: basic R$59, destaque R$79, premium R$99. Currently shows "Em breve via Pix" alert when user taps subscribe.
 
 ### Service Status Tracking
 
