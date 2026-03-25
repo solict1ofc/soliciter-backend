@@ -9,8 +9,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import * as ExpoNotifications from "expo-notifications";
 import React, { useEffect } from "react";
-import { ActivityIndicator, View, Text, StyleSheet, Image } from "react-native";
+import { Platform, View, Text, StyleSheet, Image } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -18,7 +19,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppContextProvider, useApp } from "@/context/AppContext";
 import { AuthContextProvider, useAuth } from "@/context/AuthContext";
-import { NotificationProvider } from "@/context/NotificationContext";
+import { NotificationProvider, resolveNotifRoute, type NotifData } from "@/context/NotificationContext";
 import { useServiceNotifications, useMarketplaceNotifications } from "@/hooks/useNotifications";
 
 SplashScreen.preventAutoHideAsync();
@@ -30,6 +31,33 @@ function NotificationWatcher() {
   const { services, availableServices } = useApp();
   useServiceNotifications(services);
   useMarketplaceNotifications(availableServices);
+  return null;
+}
+
+// Handles app opened via notification tap when app was KILLED (cold start)
+function ColdStartNotificationHandler() {
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    ExpoNotifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!response) return;
+        const data = response.notification.request.content.data as NotifData | undefined;
+        const route = resolveNotifRoute(data);
+        if (route) {
+          // Use setTimeout to ensure router is ready after navigation tree mounts
+          setTimeout(() => {
+            try {
+              router.push(route as any);
+            } catch {
+              // navigation not ready — ignore
+            }
+          }, 300);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return null;
 }
 
@@ -82,6 +110,7 @@ function RootLayoutNav() {
     <AppContextProvider>
       <NotificationProvider>
         <NotificationWatcher />
+        <ColdStartNotificationHandler />
         <GestureHandlerRootView>
           <KeyboardProvider>
             <Stack screenOptions={{ headerBackTitle: "Voltar" }}>
