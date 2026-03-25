@@ -413,27 +413,8 @@ function PixPaymentStep({
             <Text style={[styles.payNote, { color: C.success }]}>✓ Código copiado! Cole no app do seu banco.</Text>
           )}
 
-          {/* Manual check button */}
-          <Pressable
-            style={({ pressed }) => [styles.paidBtn, checkingPayment && { opacity: 0.6 }, pressed && { opacity: 0.8 }]}
-            onPress={onAlreadyPaid}
-            disabled={checkingPayment}
-          >
-            {checkingPayment ? (
-              <>
-                <ActivityIndicator size="small" color={C.primary} />
-                <Text style={styles.paidBtnText}>Verificando...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={20} color={C.primary} />
-                <Text style={styles.paidBtnText}>Já Paguei</Text>
-              </>
-            )}
-          </Pressable>
-
           <Text style={styles.payNote}>
-            O QR Code expira em 30 minutos. O status atualiza automaticamente.
+            O status é atualizado automaticamente após o pagamento.
           </Text>
         </>
       )}
@@ -755,29 +736,11 @@ function PixModal({
           {copied && (
             <Text style={[styles.payNote, { color: C.success }]}>✓ Código copiado! Cole no app do seu banco.</Text>
           )}
-
-          <Pressable
-            style={({ pressed }) => [styles.paidBtn, checkingPayment && { opacity: 0.6 }, pressed && { opacity: 0.8 }]}
-            onPress={onAlreadyPaid}
-            disabled={checkingPayment}
-          >
-            {checkingPayment ? (
-              <>
-                <ActivityIndicator size="small" color={C.primary} />
-                <Text style={styles.paidBtnText}>Verificando...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={20} color={C.primary} />
-                <Text style={styles.paidBtnText}>Já Paguei</Text>
-              </>
-            )}
-          </Pressable>
         </>
       )}
 
       <Text style={styles.payNote}>
-        🔒 Pagamento via Mercado Pago. Valor liberado ao prestador após confirmação.
+        🔒 Pagamento via Mercado Pago. Confirmação automática via sistema.
       </Text>
     </View>
   );

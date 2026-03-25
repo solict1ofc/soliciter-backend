@@ -342,7 +342,7 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 160 }}
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
@@ -550,14 +550,12 @@ export default function ProfileScreen() {
           const isActive = provider.plan === plan.key;
           const displayPrice = plan.promoPrice ?? plan.price;
           return (
-            <Pressable
+            <View
               key={plan.key}
-              style={({ pressed }) => [
+              style={[
                 styles.planCard,
                 isActive && { borderColor: plan.borderColor },
-                pressed && { opacity: 0.9 },
               ]}
-              onPress={() => !isActive && setSelectedPlan(plan)}
             >
               {/* Badges row */}
               <View style={styles.planBadgesRow}>
@@ -589,16 +587,10 @@ export default function ProfileScreen() {
                     <Text style={styles.planCardPeriod}>/mês</Text>
                   </View>
                 </View>
-                {isActive ? (
+                {isActive && (
                   <View style={[styles.activeTag, { backgroundColor: plan.bgColor, borderColor: plan.borderColor }]}>
                     <Ionicons name="checkmark-circle" size={14} color={plan.color} />
                     <Text style={[styles.activeTagText, { color: plan.color }]}>Ativo</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.subscribeTag, { backgroundColor: plan.bgColor, borderColor: plan.borderColor }]}>
-                    <Text style={[styles.subscribeTagText, { color: plan.color }]}>
-                      Assinar
-                    </Text>
                   </View>
                 )}
               </View>
@@ -611,7 +603,23 @@ export default function ProfileScreen() {
                   </View>
                 ))}
               </View>
-            </Pressable>
+
+              {!isActive && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.planSubscribeBtn,
+                    { backgroundColor: plan.bgColor, borderColor: plan.borderColor },
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={() => setSelectedPlan(plan)}
+                >
+                  <Ionicons name="card-outline" size={16} color={plan.color} />
+                  <Text style={[styles.planSubscribeBtnText, { color: plan.color }]}>
+                    Assinar — R$ {displayPrice},00/mês
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           );
         })}
 
@@ -1034,31 +1042,8 @@ export default function ProfileScreen() {
                 </Text>
               )}
 
-              {/* Manual confirm */}
-              <Pressable
-                style={({ pressed }) => [
-                  { backgroundColor: C.primaryGlow, borderRadius: 14, padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderWidth: 1, borderColor: C.primary },
-                  planCheckingPayment && { opacity: 0.6 },
-                  pressed && { opacity: 0.8 },
-                ]}
-                onPress={handlePlanAlreadyPaid}
-                disabled={planCheckingPayment}
-              >
-                {planCheckingPayment ? (
-                  <>
-                    <ActivityIndicator size="small" color={C.primary} />
-                    <Text style={{ color: C.primary, fontSize: 15, fontFamily: "Inter_600SemiBold" }}>Verificando...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle-outline" size={20} color={C.primary} />
-                    <Text style={{ color: C.primary, fontSize: 15, fontFamily: "Inter_600SemiBold" }}>Já Paguei</Text>
-                  </>
-                )}
-              </Pressable>
-
               <Text style={{ color: C.textMuted, fontSize: 11, textAlign: "center", marginTop: 10 }}>
-                🔒 Pagamento via Mercado Pago. Plano ativado imediatamente após confirmação.
+                🔒 Pagamento via Mercado Pago. Plano ativado automaticamente após confirmação do sistema.
               </Text>
             </View>
           </View>
@@ -1396,6 +1381,21 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
     flex: 1,
+  },
+  planSubscribeBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  planSubscribeBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
   },
   feeInfo: {
     flexDirection: "row",
