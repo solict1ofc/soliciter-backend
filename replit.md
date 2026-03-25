@@ -95,40 +95,26 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 
 Expo React Native app — "SOLICITE" services marketplace. Dark tech design (cyan/navy palette).
 - 4 tabs: Solicitations, Global marketplace, Provider area, Profile
-- Service lifecycle: `pending_payment → available → accepted → in_progress → completed → rated`
-- **Mercado Pago Pix payment flow**: mobile calls backend to create Pix payment, shows QR Code inline, polls status automatically
+- Service lifecycle: `available → accepted → in_progress → completed → rated`
+- **MVP (Play Store launch)**: No payment integration — services publish directly as `available`, no Pix/escrow/Mercado Pago. Payment will be added in a future update.
 - Key files: `app/(tabs)/index.tsx` (client flow), `app/(tabs)/global.tsx` (marketplace), `app/(tabs)/provider.tsx` (provider), `context/AppContext.tsx`
 - Chat available after service is accepted
 - AsyncStorage keys: `servicosapp_services_v2` (services), `servicosapp_provider_v3` (provider)
 - `EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN` — used to construct API URL: `https://${EXPO_PUBLIC_DOMAIN}/api`
 
-### Mercado Pago Pix Payment Integration
+### Payment (MVP — REMOVED for Play Store launch)
 
-End-to-end Pix payment flow using Mercado Pago SDK v2:
-
-- **DB table**: `service_payments` (`service_id`, `payment_id`, `amount`, `status`, `pix_code`, `created_at`, `paid_at`)
-- **Backend** (`artifacts/api-server/src/`):
-  - `routes/payment.ts` — 2 endpoints:
-    - `POST /api/payment/create-payment` — creates Pix payment via MP API; returns `{ paymentId, qrCode, pixCode }`
-    - `GET /api/payment/status/:serviceId` — checks DB status; if still pending, verifies live with MP API
-  - `app.ts` — webhook at `POST /api/payment/webhook` — receives MP notifications, fetches payment status, updates DB on `approved`
-- **Mobile flow** (`artifacts/mobile/app/(tabs)/index.tsx`):
-  1. User fills service form → creates service with `pending_payment` status
-  2. **QR auto-generated immediately** when payment step is shown (no second button tap needed)
-  3. App calls `POST /api/payment/create-payment` → gets QR code (base64) + copy-paste code
-  4. QR code displayed inline — user scans in their banking app
-  5. Auto-polls `/api/payment/status/:serviceId` every 3 seconds
-  6. MP webhook fires `approved` → DB updated to `paid`
-  7. On `paid` status, `confirmPayment()` called → service becomes `available` in marketplace
-  8. "Já Paguei" button for manual verification
-  - For existing `pending_payment` cards: **QR auto-generated when modal opens** (no second tap)
-- **Platform fee**: 10% only for "free" plan providers; waived for basic/destaque/premium
-- **Escrow model**: client pays upfront via Pix, funds held in platform until service completion
-- **Env var**: `MERCADO_PAGO_ACCESS_TOKEN` — required in both dev and production
+All client-side payment flows have been removed for the MVP launch:
+- `createService()` in `AppContext.tsx` creates services with `status: "available"` directly (no `pending_payment`, no Pix QR code)
+- `PixModal` component deleted from `index.tsx`
+- `RatingModal` now shows clean confirm+rate UI (no payment release language)
+- Profile: `handleSubscribe` shows "Em breve" alert; withdrawal button shows "Em breve" alert
+- Backend payment routes (`routes/payment.ts`, `routes/pix.ts`) still exist but are not called by mobile
+- **Future**: Mercado Pago Pix escrow will be added in a post-MVP update
 
 ### Subscription Plans (Plano Assinatura)
 
-Provider plan selection UI exists in `profile.tsx`. Payment via Pix is pending implementation. Plans: basic R$59, destaque R$79, premium R$99. Currently shows "Em breve via Pix" alert when user taps subscribe.
+Plans: Basic R$59, Destaque R$79, Premium R$99. Plan UI exists in `profile.tsx` but tapping subscribe shows "Em breve" alert. Plans will be activatable in a future update.
 
 ### Service Status Tracking
 

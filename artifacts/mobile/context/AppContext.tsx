@@ -133,48 +133,10 @@ function useAppContextValue() {
       } else {
         setProvider(makeDefaultProvider(userId));
       }
-      // Reconcile pending payments on startup (handles app restart after Pix payment)
-      if (userId !== "guest") {
-        syncPendingPayments(loaded, SERVICES_KEY);
-      }
     } catch {
       // silent
     } finally {
       setLoading(false);
-    }
-  };
-
-  /**
-   * syncPendingPayments — called on startup to reconcile local state with payment DB.
-   * Finds services stuck in "pending_payment" and checks if Mercado Pago confirmed them.
-   * Updates local state automatically if paid — no user action needed.
-   */
-  const syncPendingPayments = async (currentServices: Service[], storageKey: string) => {
-    const pending = currentServices.filter((s) => s.status === "pending_payment");
-    if (pending.length === 0) return;
-
-    let updated = false;
-    const reconciled = await Promise.all(
-      currentServices.map(async (s) => {
-        if (s.status !== "pending_payment") return s;
-        try {
-          const res = await fetch(`${API_BASE}/payment/status/${s.id}`);
-          if (!res.ok) return s;
-          const { status } = await res.json();
-          if (status === "paid") {
-            updated = true;
-            return { ...s, status: "available" as ServiceStatus };
-          }
-        } catch {
-          // network error — keep as-is
-        }
-        return s;
-      })
-    );
-
-    if (updated) {
-      setServices(reconciled);
-      await AsyncStorage.setItem(storageKey, JSON.stringify(reconciled));
     }
   };
 
@@ -229,7 +191,7 @@ function useAppContextValue() {
         neighborhood: data.neighborhood,
         urgent: isUrgent,
         priority: isUrgent,
-        status: "pending_payment",
+        status: "available",
         createdAt: new Date().toISOString(),
         chatMessages: [],
       };

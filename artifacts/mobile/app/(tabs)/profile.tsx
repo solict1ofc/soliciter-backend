@@ -236,45 +236,9 @@ export default function ProfileScreen() {
     return !!(bankHolder.trim() && bankCPF.trim() && bankName.trim() && bankAgency.trim() && bankAccount.trim());
   };
 
-  const handleSubscribe = async (plan: PlanConfig) => {
-    if (subscribing) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSubscribing(true);
-    try {
-      const price = plan.promoPrice ?? plan.price;
-      const amountInCents = Math.round(price * 100);
-      const planPaymentId = `plan_${plan.key}_${user?.id ?? "guest"}_${Date.now()}`;
-
-      const res = await fetch(`${API_BASE}/payment/create-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          serviceId: planPaymentId,
-          amountInCents,
-          title: `SOLICITE - ${plan.name} (mensal)`,
-          userEmail: user?.email,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        Alert.alert("Erro", err.error || "Não foi possível criar a cobrança. Tente novamente.");
-        return;
-      }
-
-      const data = await res.json();
-      setPlanPixModal({
-        qrCode: data.qrCode,
-        pixCode: data.pixCode,
-        paymentId: planPaymentId,
-        planKey: plan.key,
-      });
-      setSelectedPlan(null);
-    } catch {
-      Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
-    } finally {
-      setSubscribing(false);
-    }
+  const handleSubscribe = (_plan: PlanConfig) => {
+    Alert.alert("Em breve", "Os planos estarão disponíveis na próxima versão do SOLICITE. Obrigado pela paciência!");
+    setSelectedPlan(null);
   };
 
   const handlePlanAlreadyPaid = async () => {
@@ -481,18 +445,15 @@ export default function ProfileScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.withdrawBtn,
-                provider.earnings <= 0 && styles.withdrawBtnDisabled,
                 pressed && { opacity: 0.85 },
               ]}
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                resetWithdrawForm();
-                setWithdrawModal(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                Alert.alert("Em breve", "Saques estarão disponíveis na próxima versão do SOLICITE.");
               }}
-              disabled={provider.earnings <= 0}
             >
-              <Ionicons name="arrow-up-circle-outline" size={18} color={provider.earnings <= 0 ? C.textMuted : "#000"} />
-              <Text style={[styles.withdrawBtnText, provider.earnings <= 0 && { color: C.textMuted }]}>Sacar</Text>
+              <Ionicons name="arrow-up-circle-outline" size={18} color="#000" />
+              <Text style={styles.withdrawBtnText}>Sacar</Text>
             </Pressable>
           </View>
 
@@ -931,12 +892,9 @@ export default function ProfileScreen() {
                   pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
                 ]}
                 onPress={() => handleSubscribe(selectedPlan)}
-                disabled={subscribing}
               >
                 <Text style={styles.modalSubscribeText}>
-                  {subscribing
-                    ? "Gerando cobrança Pix..."
-                    : `Pagar via Pix — R$ ${selectedPlan.promoPrice ?? selectedPlan.price},00/mês`}
+                  Em breve — R$ {selectedPlan.promoPrice ?? selectedPlan.price},00/mês
                 </Text>
               </Pressable>
             </View>
@@ -946,7 +904,7 @@ export default function ProfileScreen() {
 
       {/* ── MODAL PAGAMENTO DO PLANO ── */}
       <Modal
-        visible={planPixModal !== null}
+        visible={false}
         transparent
         animationType="slide"
         onRequestClose={() => {

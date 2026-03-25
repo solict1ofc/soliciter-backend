@@ -1,12 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -20,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { useApp, mpGrossUp, MP_PAYMENT_FEE } from "@/context/AppContext";
+import { useApp } from "@/context/AppContext";
 import type { Service, ServiceStatus } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
@@ -28,24 +26,20 @@ import { SoliciteLogo } from "@/components/SoliciteLogo";
 
 const C = Colors.dark;
 
-const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
-
 // ─── Status config ───────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  pending_payment: { label: "Aguardando Pagamento", color: C.warning,       icon: "time-outline" },
-  available:       { label: "Disponível no Global",  color: C.primary,       icon: "globe-outline" },
-  accepted:        { label: "Aceito pelo Prestador", color: C.accent,        icon: "person-add-outline" },
-  in_progress:     { label: "Em Andamento",          color: "#FF9500",       icon: "construct-outline" },
-  completed:       { label: "Aguardando Pagamento",  color: C.warning,       icon: "cash-outline" },
-  rated:           { label: "Concluído e Pago",      color: C.textSecondary, icon: "ribbon-outline" },
+  pending_payment: { label: "Publicando...",          color: C.primary,       icon: "time-outline" },
+  available:       { label: "Disponível no Global",   color: C.primary,       icon: "globe-outline" },
+  accepted:        { label: "Aceito pelo Prestador",  color: C.accent,        icon: "person-add-outline" },
+  in_progress:     { label: "Em Andamento",           color: "#FF9500",       icon: "construct-outline" },
+  completed:       { label: "Concluído — Confirmar",  color: C.success,       icon: "checkmark-circle-outline" },
+  rated:           { label: "Concluído",              color: C.textSecondary, icon: "ribbon-outline" },
 };
 
-const ESCROW_STATUSES: ServiceStatus[] = ["available", "accepted", "in_progress", "completed"];
-
 // ─── Step progress bar ───────────────────────────────────────────────────────
-function StepBar({ step }: { step: "form" | "payment" | "success" }) {
-  const steps = ["Dados", "Pagamento", "Publicado"];
-  const active = step === "form" ? 0 : step === "payment" ? 1 : 2;
+function StepBar({ step }: { step: "form" | "success" }) {
+  const steps = ["Dados", "Publicado"];
+  const active = step === "form" ? 0 : 1;
   return (
     <View style={styles.stepBar}>
       {steps.map((label, i) => {
@@ -127,26 +121,13 @@ function InputField({
   );
 }
 
-// ─── Escrow indicator ─────────────────────────────────────────────────────────
-function EscrowBadge({ value }: { value: number }) {
-  return (
-    <View style={styles.escrowBadge}>
-      <Ionicons name="lock-closed" size={13} color={C.warning} />
-      <Text style={styles.escrowText}>
-        R$ {value.toFixed(2)} retido na plataforma — aguardando liberação
-      </Text>
-    </View>
-  );
-}
-
 // ─── Service card ─────────────────────────────────────────────────────────────
 function ServiceStatusCard({
-  service, onPay, onConfirmAndRate,
+  service, onConfirmAndRate,
 }: {
-  service: Service; onPay: () => void; onConfirmAndRate: () => void;
+  service: Service; onConfirmAndRate: () => void;
 }) {
   const cfg = STATUS_CONFIG[service.status];
-  const showEscrow = ESCROW_STATUSES.includes(service.status);
 
   return (
     <View style={[styles.serviceCard, service.urgent && styles.serviceCardUrgent]}>
@@ -165,7 +146,7 @@ function ServiceStatusCard({
           {service.urgent && (
             <View style={styles.urgentTag}>
               <Ionicons name="flash" size={10} color={C.danger} />
-              <Text style={styles.urgentTagText}>+R$10 URGENTE</Text>
+              <Text style={styles.urgentTagText}>URGENTE</Text>
             </View>
           )}
         </View>
@@ -175,18 +156,6 @@ function ServiceStatusCard({
         <Ionicons name={cfg.icon} size={13} color={cfg.color} />
         <Text style={[styles.statusBadgeText, { color: cfg.color }]}>{cfg.label}</Text>
       </View>
-
-      {showEscrow && <EscrowBadge value={service.finalValue} />}
-
-      {service.status === "pending_payment" && (
-        <Pressable
-          style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.warning }, pressed && styles.pressed]}
-          onPress={onPay}
-        >
-          <Ionicons name="qr-code-outline" size={20} color="#000" />
-          <Text style={styles.actionBtnText}>Pagar via Pix — R$ {mpGrossUp(service.finalValue).toFixed(2)}</Text>
-        </Pressable>
-      )}
 
       {service.status === "accepted" && (
         <View style={styles.infoNote}>
@@ -203,18 +172,18 @@ function ServiceStatusCard({
 
       {service.status === "completed" && (
         <>
-          <View style={[styles.infoNote, { backgroundColor: "rgba(255,184,0,0.12)", borderColor: C.warning, borderWidth: 1, borderRadius: 10 }]}>
-            <Ionicons name="cash-outline" size={17} color={C.warning} />
-            <Text style={[styles.infoNoteText, { color: C.warning, fontFamily: "Inter_600SemiBold" }]}>
-              Prestador finalizou o serviço — efetue o pagamento!
+          <View style={[styles.infoNote, { backgroundColor: "rgba(0,230,118,0.1)", borderColor: C.success, borderWidth: 1, borderRadius: 10 }]}>
+            <Ionicons name="checkmark-circle-outline" size={17} color={C.success} />
+            <Text style={[styles.infoNoteText, { color: C.success, fontFamily: "Inter_600SemiBold" }]}>
+              Prestador finalizou o serviço — confirme e avalie!
             </Text>
           </View>
           <Pressable
-            style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.warning }, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.actionBtn, { backgroundColor: C.success }, pressed && styles.pressed]}
             onPress={onConfirmAndRate}
           >
-            <Ionicons name="cash-outline" size={20} color="#000" />
-            <Text style={styles.actionBtnText}>Efetuar Pagamento ao Prestador</Text>
+            <Ionicons name="checkmark-done-outline" size={20} color="#000" />
+            <Text style={styles.actionBtnText}>Confirmar Conclusão</Text>
           </Pressable>
         </>
       )}
@@ -254,176 +223,6 @@ function ServiceStatusCard({
   );
 }
 
-// ─── Pix payment step (inline form step 2) ────────────────────────────────────
-type PixData = { qrCode: string; pixCode: string; paymentId: string };
-
-function PixPaymentStep({
-  service,
-  pixData,
-  creating,
-  onGenerate,
-}: {
-  service: Service | undefined;
-  pixData: PixData | null;
-  creating: boolean;
-  onGenerate: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    if (!pixData) return;
-    await Clipboard.setStringAsync(pixData.pixCode);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
-  };
-
-  if (!service) return null;
-
-  return (
-    <View style={styles.card}>
-      {/* Shield notice */}
-      <View style={styles.escrowNotice}>
-        <Ionicons name="shield-checkmark" size={22} color={C.primary} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.escrowNoticeTitle}>Pagamento Antecipado Seguro</Text>
-          <Text style={styles.escrowNoticeDesc}>
-            O valor fica retido na plataforma e só é liberado ao prestador após você confirmar o serviço.
-          </Text>
-        </View>
-      </View>
-
-      {/* Order summary */}
-      {(() => {
-        const gross = mpGrossUp(service.finalValue);
-        const mpFee = gross - service.finalValue;
-        return (
-          <View style={styles.orderSummary}>
-            <Text style={styles.orderSummaryTitle}>{service.title}</Text>
-            <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>Valor base</Text>
-              <Text style={styles.orderValue}>R$ {service.baseValue.toFixed(2)}</Text>
-            </View>
-            {service.urgent && (
-              <View style={styles.orderRow}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <Ionicons name="flash" size={13} color={C.danger} />
-                  <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa de urgência</Text>
-                </View>
-                <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
-              </View>
-            )}
-            <View style={styles.orderRow}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Ionicons name="card-outline" size={13} color={C.textMuted} />
-                <Text style={[styles.orderLabel, { color: C.textMuted }]}>
-                  Taxa de processamento ({(MP_PAYMENT_FEE * 100).toFixed(0)}%)
-                </Text>
-              </View>
-              <Text style={[styles.orderValue, { color: C.textMuted }]}>+R$ {mpFee.toFixed(2)}</Text>
-            </View>
-            <View style={[styles.orderRow, styles.orderTotal]}>
-              <Text style={styles.orderTotalLabel}>Total a pagar</Text>
-              <Text style={styles.orderTotalValue}>R$ {gross.toFixed(2)}</Text>
-            </View>
-          </View>
-        );
-      })()}
-
-      {pixData === null ? (
-        /* ── Step: generate QR ── */
-        <>
-          <View style={styles.pixInfo}>
-            <Ionicons name="flash" size={20} color="#00E676" />
-            <Text style={styles.pixInfoText}>
-              Pague via Pix — aprovação em segundos, sem sair do app
-            </Text>
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [styles.payBtn, creating && { opacity: 0.5 }, pressed && styles.pressed]}
-            onPress={onGenerate}
-            disabled={creating}
-          >
-            {creating ? (
-              <>
-                <ActivityIndicator color="#000" size="small" />
-                <Text style={styles.payBtnText}>Gerando QR Code...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="qr-code-outline" size={20} color="#000" />
-                <Text style={styles.payBtnText}>Gerar QR Code Pix — R$ {mpGrossUp(service.finalValue).toFixed(2)}</Text>
-              </>
-            )}
-          </Pressable>
-
-          <Text style={styles.payNote}>
-            🔒 Pagamento seguro via Mercado Pago. Valor liberado ao prestador só após sua confirmação.
-          </Text>
-        </>
-      ) : (
-        /* ── Step: show QR + code ── */
-        <>
-          {/* Auto-polling badge */}
-          <View style={styles.pollingBadge}>
-            <ActivityIndicator size="small" color={C.primary} />
-            <Text style={styles.pollingText}>Aguardando confirmação do pagamento...</Text>
-          </View>
-
-          {/* QR Code */}
-          {pixData.qrCode ? (
-            <View style={styles.qrWrapper}>
-              <Image
-                source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
-              <Text style={styles.qrHint}>Escaneie no app do seu banco</Text>
-            </View>
-          ) : (
-            <View style={[styles.qrWrapper, { justifyContent: "center", alignItems: "center", minHeight: 120 }]}>
-              <Ionicons name="qr-code-outline" size={48} color={C.textMuted} />
-              <Text style={[styles.qrHint, { marginTop: 8 }]}>Use o código Pix abaixo</Text>
-            </View>
-          )}
-
-          {/* Divider */}
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Pix Copia e Cola</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Copy code */}
-          <Pressable
-            style={({ pressed }) => [styles.copyCodeBtn, pressed && { opacity: 0.8 }]}
-            onPress={handleCopy}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.copyCodeLabel}>Código Pix</Text>
-              <Text style={styles.copyCodeValue} numberOfLines={1} ellipsizeMode="middle">
-                {pixData.pixCode}
-              </Text>
-            </View>
-            <View style={[styles.copyIconWrap, copied && { backgroundColor: C.success }]}>
-              <Ionicons name={copied ? "checkmark" : "copy-outline"} size={18} color={copied ? "#000" : C.primary} />
-            </View>
-          </Pressable>
-
-          {copied && (
-            <Text style={[styles.payNote, { color: C.success }]}>✓ Código copiado! Cole no app do seu banco.</Text>
-          )}
-
-          <Text style={styles.payNote}>
-            O status é atualizado automaticamente após o pagamento.
-          </Text>
-        </>
-      )}
-    </View>
-  );
-}
-
 // ─── Success screen ───────────────────────────────────────────────────────────
 function SuccessScreen({
   neighborhood, city, urgent, onNew, onMyServices,
@@ -456,10 +255,6 @@ function SuccessScreen({
           </View>
         )}
       </View>
-      <View style={styles.escrowBadge}>
-        <Ionicons name="lock-closed" size={14} color={C.warning} />
-        <Text style={styles.escrowText}>Pagamento retido — será liberado após confirmação</Text>
-      </View>
       <Pressable
         style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.7 }]}
         onPress={onNew}
@@ -480,45 +275,26 @@ function SuccessScreen({
 
 // ─── Rating modal ──────────────────────────────────────────────────────────────
 function RatingModal({
-  service, provider, PLATFORM_FEE_RATE, onClose,
-  onConfirm, confirmingPayment, paymentResult,
+  service, onClose, onConfirm, confirming, done,
 }: {
   service: Service;
-  provider: any;
-  PLATFORM_FEE_RATE: number;
   onClose: () => void;
   onConfirm: (rating: number) => void;
-  confirmingPayment: boolean;
-  paymentResult: { fee: number; providerEarning: number; platformFeeApplied: boolean } | null;
+  confirming: boolean;
+  done: boolean;
 }) {
   const [rating, setRating] = useState(0);
-  const fee = provider.plan === "free" ? service.finalValue * PLATFORM_FEE_RATE : 0;
-  const providerEarning = service.finalValue - fee;
   const ratingLabels = ["", "Muito ruim", "Ruim", "Regular", "Bom", "Excelente!"];
 
-  if (paymentResult) {
+  if (done) {
     return (
       <View style={styles.modalContent}>
         <View style={styles.successIconSm}>
           <Ionicons name="checkmark-circle" size={72} color={C.success} />
         </View>
-        <Text style={styles.modalTitle}>Pagamento Efetuado!</Text>
-        <Text style={styles.modalSub}>O valor foi liberado direto para a conta do prestador.</Text>
-        <View style={styles.releaseBox}>
-          <Text style={styles.releaseLabel}>Valor creditado ao prestador</Text>
-          <Text style={styles.releaseValue}>R$ {paymentResult.providerEarning.toFixed(2)}</Text>
-          {paymentResult.platformFeeApplied ? (
-            <Text style={styles.releaseFee}>
-              Taxa da plataforma descontada: R$ {paymentResult.fee.toFixed(2)} (10%)
-            </Text>
-          ) : (
-            <Text style={[styles.releaseFee, { color: C.success }]}>Sem taxa — plano ativo ✓</Text>
-          )}
-        </View>
-        <Pressable
-          style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]}
-          onPress={onClose}
-        >
+        <Text style={styles.modalTitle}>Serviço Concluído!</Text>
+        <Text style={styles.modalSub}>Obrigado por usar o SOLICITE. Sua avaliação ajuda a plataforma!</Text>
+        <Pressable style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]} onPress={onClose}>
           <Ionicons name="checkmark-done" size={20} color="#000" />
           <Text style={styles.payBtnText}>Fechar</Text>
         </Pressable>
@@ -529,8 +305,8 @@ function RatingModal({
   return (
     <View style={styles.modalContent}>
       <View style={styles.modalHeader}>
-        <Text style={styles.modalTitle}>Efetuar Pagamento</Text>
-        {!confirmingPayment && (
+        <Text style={styles.modalTitle}>Confirmar Conclusão</Text>
+        {!confirming && (
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
             <Ionicons name="close-outline" size={20} color={C.textSecondary} />
           </Pressable>
@@ -539,33 +315,9 @@ function RatingModal({
 
       <Text style={styles.modalSub} numberOfLines={1}>{service.title}</Text>
 
-      <View style={styles.breakdownBox}>
-        <Text style={styles.breakdownTitle}>Resumo do Pagamento</Text>
-        <View style={styles.orderRow}>
-          <Text style={styles.orderLabel}>Valor retido na plataforma</Text>
-          <Text style={styles.orderValue}>R$ {service.finalValue.toFixed(2)}</Text>
-        </View>
-        {provider.plan === "free" ? (
-          <View style={styles.orderRow}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Ionicons name="information-circle-outline" size={14} color={C.danger} />
-              <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa plataforma (10%)</Text>
-            </View>
-            <Text style={[styles.orderValue, { color: C.danger }]}>-R$ {fee.toFixed(2)}</Text>
-          </View>
-        ) : (
-          <View style={styles.orderRow}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Ionicons name="shield-checkmark-outline" size={14} color={C.success} />
-              <Text style={[styles.orderLabel, { color: C.success }]}>Taxa plataforma</Text>
-            </View>
-            <Text style={[styles.orderValue, { color: C.success }]}>Isento (plano ativo)</Text>
-          </View>
-        )}
-        <View style={[styles.orderRow, styles.orderTotal]}>
-          <Text style={styles.orderTotalLabel}>Prestador recebe agora</Text>
-          <Text style={styles.orderTotalValue}>R$ {providerEarning.toFixed(2)}</Text>
-        </View>
+      <View style={[styles.infoNote, { backgroundColor: "rgba(0,230,118,0.08)", borderColor: C.success, borderWidth: 1, borderRadius: 10, marginBottom: 4 }]}>
+        <Ionicons name="checkmark-circle-outline" size={16} color={C.success} />
+        <Text style={[styles.infoNoteText, { color: C.success }]}>O prestador marcou este serviço como concluído.</Text>
       </View>
 
       <View style={styles.ratingSection}>
@@ -580,216 +332,48 @@ function RatingModal({
       </View>
 
       <Pressable
-        style={({ pressed }) => [styles.payBtn, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.payBtn, { backgroundColor: C.success }, pressed && styles.pressed]}
         onPress={() => onConfirm(rating)}
-        disabled={confirmingPayment}
+        disabled={confirming}
       >
-        {confirmingPayment ? (
-          <>
-            <ActivityIndicator color="#000" size="small" />
-            <Text style={styles.payBtnText}>Efetuando pagamento...</Text>
-          </>
+        {confirming ? (
+          <ActivityIndicator color="#000" size="small" />
         ) : (
           <>
-            <Ionicons name="cash-outline" size={20} color="#000" />
-            <Text style={styles.payBtnText}>
-              Pagar R$ {providerEarning.toFixed(2)} ao Prestador
-            </Text>
+            <Ionicons name="checkmark-done-outline" size={20} color="#000" />
+            <Text style={styles.payBtnText}>Confirmar Conclusão</Text>
           </>
         )}
       </Pressable>
-
-      <Text style={[styles.payNote, { marginTop: 8, textAlign: "center" }]}>
-        O valor sai do escrow e vai direto para o prestador.
-      </Text>
     </View>
   );
 }
 
-// ─── Pix modal (for "Pagar Agora" on existing service cards) ──────────────────
-function PixModal({
-  service,
-  pixData,
-  creating,
-  onGenerate,
-  onClose,
-}: {
-  service: Service | null;
-  pixData: PixData | null;
-  creating: boolean;
-  onGenerate: () => void;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    if (!pixData) return;
-    await Clipboard.setStringAsync(pixData.pixCode);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
-  };
-
-  if (!service) return null;
-
-  return (
-    <View style={styles.modalContent}>
-      <View style={styles.modalHeader}>
-        <Text style={styles.modalTitle}>Pagar via Pix</Text>
-        {!creating && (
-          <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-            <Ionicons name="close-outline" size={20} color={C.textSecondary} />
-          </Pressable>
-        )}
-      </View>
-
-      <Text style={styles.modalSub} numberOfLines={1}>{service.title}</Text>
-
-      {/* Order total with fee breakdown */}
-      {(() => {
-        const gross = mpGrossUp(service.finalValue);
-        const mpFee = gross - service.finalValue;
-        return (
-          <View style={styles.breakdownBox}>
-            <View style={styles.orderRow}>
-              <Text style={styles.orderLabel}>Serviço</Text>
-              <Text style={styles.orderValue}>R$ {service.finalValue.toFixed(2)}</Text>
-            </View>
-            <View style={styles.orderRow}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <Ionicons name="card-outline" size={12} color={C.textMuted} />
-                <Text style={[styles.orderLabel, { color: C.textMuted, fontSize: 11 }]}>
-                  Processamento ({(MP_PAYMENT_FEE * 100).toFixed(0)}%)
-                </Text>
-              </View>
-              <Text style={[styles.orderValue, { color: C.textMuted, fontSize: 11 }]}>+R$ {mpFee.toFixed(2)}</Text>
-            </View>
-            <View style={[styles.orderRow, { borderTopWidth: 1, borderTopColor: C.border, marginTop: 4, paddingTop: 8 }]}>
-              <Text style={styles.orderTotalLabel}>Total a pagar</Text>
-              <Text style={styles.orderTotalValue}>R$ {gross.toFixed(2)}</Text>
-            </View>
-          </View>
-        );
-      })()}
-
-      {pixData === null ? (
-        <>
-          <View style={styles.pixInfo}>
-            <Ionicons name="flash" size={18} color="#00E676" />
-            <Text style={styles.pixInfoText}>Aprovação imediata, sem sair do app</Text>
-          </View>
-          <Pressable
-            style={({ pressed }) => [styles.payBtn, creating && { opacity: 0.5 }, pressed && styles.pressed]}
-            onPress={onGenerate}
-            disabled={creating}
-          >
-            {creating ? (
-              <>
-                <ActivityIndicator color="#000" size="small" />
-                <Text style={styles.payBtnText}>Gerando QR Code...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="qr-code-outline" size={20} color="#000" />
-                <Text style={styles.payBtnText}>Gerar QR Code Pix</Text>
-              </>
-            )}
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <View style={styles.pollingBadge}>
-            <ActivityIndicator size="small" color={C.primary} />
-            <Text style={styles.pollingText}>Aguardando confirmação...</Text>
-          </View>
-
-          {pixData.qrCode ? (
-            <View style={styles.qrWrapper}>
-              <Image
-                source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
-                style={styles.qrImage}
-                resizeMode="contain"
-              />
-              <Text style={styles.qrHint}>Escaneie no app do seu banco</Text>
-            </View>
-          ) : (
-            <View style={[styles.qrWrapper, { justifyContent: "center", alignItems: "center", minHeight: 120 }]}>
-              <Ionicons name="qr-code-outline" size={48} color={C.textMuted} />
-              <Text style={[styles.qrHint, { marginTop: 8 }]}>Use o código Pix abaixo</Text>
-            </View>
-          )}
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Pix Copia e Cola</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [styles.copyCodeBtn, pressed && { opacity: 0.8 }]}
-            onPress={handleCopy}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.copyCodeLabel}>Código Pix</Text>
-              <Text style={styles.copyCodeValue} numberOfLines={1} ellipsizeMode="middle">
-                {pixData.pixCode}
-              </Text>
-            </View>
-            <View style={[styles.copyIconWrap, copied && { backgroundColor: C.success }]}>
-              <Ionicons name={copied ? "checkmark" : "copy-outline"} size={18} color={copied ? "#000" : C.primary} />
-            </View>
-          </Pressable>
-
-          {copied && (
-            <Text style={[styles.payNote, { color: C.success }]}>✓ Código copiado! Cole no app do seu banco.</Text>
-          )}
-        </>
-      )}
-
-      <Text style={styles.payNote}>
-        🔒 Pagamento via Mercado Pago. Confirmação automática via sistema.
-      </Text>
-    </View>
-  );
-}
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function SolicitacoesScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { services, createService, confirmPayment, confirmAndRate, URGENT_FEE, PLATFORM_FEE_RATE, provider } = useApp();
+  const { services, createService, confirmAndRate, URGENT_FEE, provider } = useApp();
 
   const isPremium = user?.isPremium ?? false;
 
   const [activeTab, setActiveTab] = useState<"nova" | "meus">("nova");
 
   // Form state
-  const [title, setTitle]           = useState("");
-  const [description, setDescription] = useState("");
-  const [value, setValue]           = useState("");
-  const [city, setCity]             = useState("Goiânia");
+  const [title, setTitle]               = useState("");
+  const [description, setDescription]   = useState("");
+  const [value, setValue]               = useState("");
+  const [city, setCity]                 = useState("Goiânia");
   const [neighborhood, setNeighborhood] = useState("");
-  const [urgent, setUrgent]         = useState(false);
-  const [creating, setCreating]     = useState(false);
-  const [formStep, setFormStep]     = useState<"form" | "payment" | "success">("form");
-  const [pendingId, setPendingId]   = useState<string | null>(null);
+  const [urgent, setUrgent]             = useState(false);
+  const [creating, setCreating]         = useState(false);
+  const [formStep, setFormStep]         = useState<"form" | "success">("form");
 
-  // Pix state (form flow)
-  const [pixData, setPixData]             = useState<PixData | null>(null);
-  const [generatingPix, setGeneratingPix] = useState(false);
-
-  // Pix modal (card flow — existing pending_payment services)
-  const [pixModal, setPixModal] = useState<{
-    serviceId: string;
-    svc: Service;
-    pixData: PixData | null;
-    generating: boolean;
-  } | null>(null);
-
-  // Rating modal
-  const [ratingService, setRatingService]     = useState<Service | null>(null);
-  const [confirmingPayment, setConfirmingPayment] = useState(false);
-  const [paymentResult, setPaymentResult]     = useState<{ fee: number; providerEarning: number; platformFeeApplied: boolean } | null>(null);
+  // Rating/confirm modal
+  const [ratingService, setRatingService] = useState<Service | null>(null);
+  const [confirming, setConfirming]       = useState(false);
+  const [confirmDone, setConfirmDone]     = useState(false);
 
   const numericValue = parseFloat(value.replace(",", ".")) || 0;
   const finalValue   = isPremium ? numericValue : (urgent ? numericValue + URGENT_FEE : numericValue);
@@ -797,64 +381,7 @@ export default function SolicitacoesScreen() {
   const myServices = [...services].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
-  const pendingCount = myServices.filter(
-    (s) => s.status === "pending_payment" || s.status === "completed"
-  ).length;
-
-  // ─── Payment status check ──────────────────────────────────────────────────
-  const checkPaymentStatus = useCallback(async (serviceId: string): Promise<boolean> => {
-    try {
-      const res = await fetch(`${API_BASE}/payment/status/${serviceId}`);
-      if (!res.ok) return false;
-      const { status } = await res.json();
-      return status === "paid";
-    } catch {
-      return false;
-    }
-  }, []);
-
-  // ─── Auto-poll for form flow ───────────────────────────────────────────────
-  const formPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (pixData && formStep === "payment" && pendingId) {
-      formPollRef.current = setInterval(async () => {
-        const paid = await checkPaymentStatus(pendingId);
-        if (paid) {
-          clearInterval(formPollRef.current!);
-          formPollRef.current = null;
-          await confirmPayment(pendingId);
-          setFormStep("success");
-          setPixData(null);
-        }
-      }, 3000);
-    }
-    return () => {
-      if (formPollRef.current) clearInterval(formPollRef.current);
-    };
-  }, [pixData, formStep, pendingId, checkPaymentStatus, confirmPayment]);
-
-  // ─── Auto-poll for modal flow ──────────────────────────────────────────────
-  const modalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (pixModal?.pixData && pixModal.serviceId) {
-      modalPollRef.current = setInterval(async () => {
-        const paid = await checkPaymentStatus(pixModal.serviceId);
-        if (paid) {
-          clearInterval(modalPollRef.current!);
-          modalPollRef.current = null;
-          await confirmPayment(pixModal.serviceId);
-          setPixModal(null);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Pagamento confirmado! ✓", "Sua solicitação está disponível no marketplace.");
-        }
-      }, 3000);
-    }
-    return () => {
-      if (modalPollRef.current) clearInterval(modalPollRef.current);
-    };
-  }, [pixModal?.pixData, pixModal?.serviceId, checkPaymentStatus, confirmPayment]);
+  const pendingCount = myServices.filter((s) => s.status === "completed").length;
 
   // ─── Create service ────────────────────────────────────────────────────────
   const handleCreate = async () => {
@@ -873,146 +400,30 @@ export default function SolicitacoesScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCreating(true);
     try {
-      const svc = await createService({
+      await createService({
         title: title.trim(), description: description.trim(),
         value: numericValue, city, neighborhood: neighborhood.trim(), urgent,
       });
-      setPendingId(svc.id);
-      setFormStep("payment");
-      setGeneratingPix(true);
-      try {
-        const amountInCents = Math.round(mpGrossUp(svc.finalValue) * 100);
-        const res = await fetch(`${API_BASE}/payment/create-payment`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serviceId: svc.id, amountInCents, title: svc.title, userEmail: user?.email }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId });
-        }
-      } catch {
-      } finally {
-        setGeneratingPix(false);
-      }
+      setFormStep("success");
     } finally {
       setCreating(false);
     }
   };
 
-  // ─── Generate Pix for form flow ────────────────────────────────────────────
-  const handleGeneratePix = async () => {
-    if (!pendingId) return;
-    const svc = services.find((s) => s.id === pendingId);
-    if (!svc) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setGeneratingPix(true);
-    try {
-      const amountInCents = Math.round(mpGrossUp(svc.finalValue) * 100);
-      const res = await fetch(`${API_BASE}/payment/create-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          serviceId: pendingId,
-          amountInCents,
-          title: svc.title,
-          userEmail: user?.email,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        Alert.alert("Erro", err.error || "Não foi possível gerar o QR Code. Tente novamente.");
-        return;
-      }
-      const data = await res.json();
-      setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId });
-    } catch {
-      Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
-    } finally {
-      setGeneratingPix(false);
-    }
-  };
-
-
-  // ─── Open Pix modal for card (existing pending_payment service) ───────────
-  const handlePayFromCard = async (serviceId: string) => {
-    const svc = services.find((s) => s.id === serviceId);
-    if (!svc) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPixModal({ serviceId, svc, pixData: null, generating: true });
-    try {
-      const amountInCents = Math.round(mpGrossUp(svc.finalValue) * 100);
-      const res = await fetch(`${API_BASE}/payment/create-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serviceId, amountInCents, title: svc.title, userEmail: user?.email }),
-      });
-      if (!res.ok) {
-        setPixModal((m) => m && { ...m, generating: false });
-        return;
-      }
-      const data = await res.json();
-      setPixModal((m) => m && {
-        ...m,
-        generating: false,
-        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId },
-      });
-    } catch {
-      setPixModal((m) => m && { ...m, generating: false });
-    }
-  };
-
-  // ─── Generate Pix inside modal ─────────────────────────────────────────────
-  const handleModalGeneratePix = async () => {
-    if (!pixModal) return;
-    setPixModal((m) => m && { ...m, generating: true });
-    try {
-      const amountInCents = Math.round(mpGrossUp(pixModal.svc.finalValue) * 100);
-      const res = await fetch(`${API_BASE}/payment/create-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          serviceId: pixModal.serviceId,
-          amountInCents,
-          title: pixModal.svc.title,
-          userEmail: user?.email,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        Alert.alert("Erro", err.error || "Não foi possível gerar o QR Code.");
-        setPixModal((m) => m && { ...m, generating: false });
-        return;
-      }
-      const data = await res.json();
-      setPixModal((m) => m && {
-        ...m,
-        generating: false,
-        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId },
-      });
-    } catch {
-      Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
-      setPixModal((m) => m && { ...m, generating: false });
-    }
-  };
-
   const handleConfirmAndRate = async (rating: number) => {
-    if (!ratingService || rating === 0) return;
+    if (!ratingService) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setConfirmingPayment(true);
-    const result = await confirmAndRate(ratingService.id, rating);
-    setConfirmingPayment(false);
-    if (result) setPaymentResult(result);
+    setConfirming(true);
+    await confirmAndRate(ratingService.id, rating);
+    setConfirming(false);
+    setConfirmDone(true);
   };
 
   const handleReset = () => {
     setTitle(""); setDescription(""); setValue("");
     setCity("Goiânia"); setNeighborhood("");
-    setUrgent(false); setPendingId(null); setFormStep("form");
-    setPixData(null);
+    setUrgent(false); setFormStep("form");
   };
-
-  const pendingService = pendingId ? services.find((s) => s.id === pendingId) : undefined;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -1140,16 +551,9 @@ export default function SolicitacoesScreen() {
                         <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
                       </View>
                     ) : null}
-                    <View style={styles.orderRow}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                        <Ionicons name="card-outline" size={12} color={C.textMuted} />
-                        <Text style={[styles.orderLabel, { color: C.textMuted, fontSize: 11 }]}>Taxa processamento (5%)</Text>
-                      </View>
-                      <Text style={[styles.orderValue, { color: C.textMuted, fontSize: 11 }]}>+R$ {(mpGrossUp(finalValue) - finalValue).toFixed(2)}</Text>
-                    </View>
                     <View style={[styles.orderRow, styles.orderTotal]}>
-                      <Text style={styles.orderTotalLabel}>Total a pagar</Text>
-                      <Text style={styles.orderTotalValue}>R$ {mpGrossUp(finalValue).toFixed(2)}</Text>
+                      <Text style={styles.orderTotalLabel}>Total estimado</Text>
+                      <Text style={styles.orderTotalValue}>R$ {finalValue.toFixed(2)}</Text>
                     </View>
                   </View>
                 )}
@@ -1163,21 +567,12 @@ export default function SolicitacoesScreen() {
                     <ActivityIndicator color="#000" />
                   ) : (
                     <>
-                      <Ionicons name="arrow-forward-circle-outline" size={20} color="#000" />
-                      <Text style={styles.primaryBtnText}>Continuar para Pagamento</Text>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+                      <Text style={styles.primaryBtnText}>Publicar Solicitação</Text>
                     </>
                   )}
                 </Pressable>
               </View>
-            )}
-
-            {formStep === "payment" && (
-              <PixPaymentStep
-                service={pendingService}
-                pixData={pixData}
-                creating={generatingPix}
-                onGenerate={handleGeneratePix}
-              />
             )}
 
             {formStep === "success" && (
@@ -1210,9 +605,8 @@ export default function SolicitacoesScreen() {
                 <ServiceStatusCard
                   key={svc.id}
                   service={svc}
-                  onPay={() => handlePayFromCard(svc.id)}
                   onConfirmAndRate={() => {
-                    setPaymentResult(null);
+                    setConfirmDone(false);
                     setRatingService(svc);
                   }}
                 />
@@ -1222,47 +616,23 @@ export default function SolicitacoesScreen() {
         )}
       </ScrollView>
 
-      {/* Rating / Payment release modal */}
+      {/* Confirm & Rate modal */}
       <Modal
         visible={ratingService !== null}
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!confirmingPayment) { setRatingService(null); setPaymentResult(null); }
+          if (!confirming) { setRatingService(null); setConfirmDone(false); }
         }}
       >
         <View style={styles.modalOverlay}>
           {ratingService && (
             <RatingModal
               service={ratingService}
-              provider={provider}
-              PLATFORM_FEE_RATE={PLATFORM_FEE_RATE}
-              onClose={() => { setRatingService(null); setPaymentResult(null); }}
+              onClose={() => { setRatingService(null); setConfirmDone(false); }}
               onConfirm={handleConfirmAndRate}
-              confirmingPayment={confirmingPayment}
-              paymentResult={paymentResult}
-            />
-          )}
-        </View>
-      </Modal>
-
-      {/* Pix modal (for existing pending_payment services) */}
-      <Modal
-        visible={pixModal !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          if (!pixModal?.generating) setPixModal(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          {pixModal && (
-            <PixModal
-              service={pixModal.svc}
-              pixData={pixModal.pixData}
-              creating={pixModal.generating}
-              onGenerate={handleModalGeneratePix}
-              onClose={() => setPixModal(null)}
+              confirming={confirming}
+              done={confirmDone}
             />
           )}
         </View>
