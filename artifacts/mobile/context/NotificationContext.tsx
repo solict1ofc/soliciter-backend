@@ -104,6 +104,19 @@ const TYPE_CONFIG: Record<
   error:   { icon: "close-circle",       color: C.danger,  bg: C.dangerLight,  border: C.danger },
 };
 
+// ─── Android notification channel setup ───────────────────────────────────────
+if (Platform.OS === "android") {
+  ExpoNotifications.setNotificationChannelAsync("default", {
+    name: "Notificações SOLICITE",
+    importance: ExpoNotifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: "#00D4FF",
+    enableLights: true,
+    enableVibrate: true,
+    showBadge: true,
+  }).catch(() => {});
+}
+
 // ─── Notification handler (foreground OS notifications → in-app toast) ────────
 ExpoNotifications.setNotificationHandler({
   handleNotification: async () => ({
