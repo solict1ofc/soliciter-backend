@@ -738,7 +738,6 @@ export default function ProfileScreen() {
                     }
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                     setWithdrawing(true);
-                    await new Promise((r) => setTimeout(r, 1500));
                     const ok = await withdrawEarnings(amt);
                     setWithdrawing(false);
                     if (!ok) {

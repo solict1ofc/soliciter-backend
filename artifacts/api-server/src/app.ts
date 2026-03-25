@@ -10,23 +10,55 @@ import { logger } from "./lib/logger";
 const app: Express = express();
 
 // ── Stripe webhook — must be BEFORE express.json() ────────────────────────────
+// Raw body needed for signature verification
 app.post(
   "/api/stripe/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
+    const sig = req.headers["stripe-signature"] as string | undefined;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event: any;
+
     try {
-      const event = JSON.parse(req.body.toString());
+      const stripe = await getUncachableStripeClient();
+
+      if (webhookSecret && sig) {
+        // Production path: verify Stripe signature (tamper-proof)
+        try {
+          event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+        } catch (sigErr: any) {
+          logger.warn({ err: sigErr }, "Stripe webhook signature verification failed");
+          return res.status(400).json({ error: "Webhook signature invalid" });
+        }
+      } else {
+        // Development path: no secret configured — parse but log warning
+        // In production you MUST set STRIPE_WEBHOOK_SECRET
+        if (process.env.NODE_ENV === "production") {
+          logger.error("STRIPE_WEBHOOK_SECRET not set in production — rejecting webhook");
+          return res.status(400).json({ error: "Webhook secret not configured" });
+        }
+        logger.warn("STRIPE_WEBHOOK_SECRET not set — skipping signature verification (dev only)");
+        event = JSON.parse(req.body.toString());
+      }
+    } catch (parseErr: any) {
+      logger.error({ err: parseErr }, "Failed to parse webhook body");
+      return res.status(400).json({ error: "Invalid webhook payload" });
+    }
+
+    try {
       const session = event.data?.object;
 
-      // ── Service payment completed ──────────────────────────────────────────
+      // ── Service payment completed (one-time checkout) ──────────────────────
       if (event.type === "checkout.session.completed" && session?.mode === "payment") {
         const serviceId = session?.metadata?.serviceId;
         if (serviceId && session?.payment_status === "paid") {
+          logger.info({ serviceId }, "Webhook: service payment confirmed");
           await db
             .update(servicePaymentsTable)
             .set({ status: "paid", paidAt: new Date() })
             .where(eq(servicePaymentsTable.serviceId, serviceId))
-            .catch(() => {});
+            .catch((e) => logger.error({ err: e }, "Failed to update service payment"));
         }
       }
 
@@ -34,6 +66,7 @@ app.post(
       if (event.type === "checkout.session.completed" && session?.mode === "subscription") {
         const userId = session?.metadata?.userId;
         if (userId && !isNaN(parseInt(userId))) {
+          logger.info({ userId }, "Webhook: subscription activated");
           const expiresAt = new Date();
           expiresAt.setMonth(expiresAt.getMonth() + 1);
           await db
@@ -44,7 +77,7 @@ app.post(
         }
       }
 
-      // ── Subscription invoice paid (renewal) ────────────────────────────────
+      // ── Subscription renewal (invoice paid) ───────────────────────────────
       if (event.type === "invoice.payment_succeeded") {
         const subscriptionId = session?.subscription;
         if (subscriptionId) {
@@ -53,24 +86,25 @@ app.post(
             const subscription = await stripe.subscriptions.retrieve(subscriptionId as string);
             const userId = (subscription.metadata as any)?.userId;
             if (userId && !isNaN(parseInt(userId))) {
+              logger.info({ userId }, "Webhook: subscription renewed");
               const expiresAt = new Date();
               expiresAt.setMonth(expiresAt.getMonth() + 1);
               await db
                 .update(usersTable)
                 .set({ isPremium: true, premiumExpiresAt: expiresAt })
                 .where(eq(usersTable.id, parseInt(userId)))
-                .catch(() => {});
+                .catch((e) => logger.error({ err: e }, "Failed to renew premium via webhook"));
             }
           } catch (e) {
-            logger.error({ err: e }, "Failed to renew premium via webhook");
+            logger.error({ err: e }, "Failed to process subscription renewal");
           }
         }
       }
 
       res.json({ received: true });
     } catch (error: any) {
-      logger.error({ err: error }, "Webhook error");
-      res.status(400).json({ error: "Webhook processing failed" });
+      logger.error({ err: error }, "Webhook processing error");
+      res.status(500).json({ error: "Webhook processing failed" });
     }
   },
 );

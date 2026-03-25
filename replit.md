@@ -138,6 +138,29 @@ Stripe Checkout subscription flow for provider plans:
   4. After browser closes (native): `refreshUser()` syncs `isPremium` from DB, then `activatePlan()` updates local provider display state
   5. Profile tab also calls `refreshUser()` on every focus (via `useFocusEffect`) to keep `isPremium` in sync
 
+### Stripe Webhook Security
+
+The webhook at `POST /api/stripe/webhook` handles 3 event types:
+- `checkout.session.completed` (mode=payment) → marks service_payments as paid
+- `checkout.session.completed` (mode=subscription) → activates isPremium for 30 days
+- `invoice.payment_succeeded` → renews isPremium on monthly subscription renewal
+
+**Signature verification logic:**
+- With `STRIPE_WEBHOOK_SECRET` set: uses `stripe.webhooks.constructEvent()` to cryptographically verify the Stripe signature — tamper-proof
+- Without secret in production: rejects webhook with 400 (security enforced)
+- Without secret in development: accepts with a warning log (convenience for local dev)
+
+**To configure in production (Render):**
+1. Stripe Dashboard → Developers → Webhooks → Add endpoint
+2. URL: `https://YOUR-SERVICE.onrender.com/api/stripe/webhook`
+3. Events: `checkout.session.completed`, `invoice.payment_succeeded`
+4. Copy the signing secret (`whsec_...`)
+5. Add as `STRIPE_WEBHOOK_SECRET` env var in Render (or Replit Secrets)
+
+**Note:** Even without webhooks, payment confirmation is reliable via:
+- `success_url` handler: verifies with Stripe API on redirect
+- `GET /api/payment/status/:id`: verifies live with Stripe if DB shows pending
+
 ### Production URL Resolution (`getApiBase`)
 
 Both `payment.ts` and `subscription.ts` use `getApiBase(req)` which resolves the server's public URL in priority order:
