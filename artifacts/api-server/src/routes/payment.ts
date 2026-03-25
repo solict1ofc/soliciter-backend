@@ -267,4 +267,90 @@ router.post("/payment/release/:serviceId", async (req, res) => {
   }
 });
 
+// ── Aliases de URL curta ──────────────────────────────────────────────────────
+// POST /api/create-payment → mesmo que POST /api/payment/create-payment
+router.post("/create-payment", (req, res, next) => {
+  req.url = "/payment/create-payment";
+  next("route");
+});
+router.post("/create-payment", async (req, res) => {
+  const { serviceId, amountInCents, title, userEmail } = req.body as {
+    serviceId: string; amountInCents: number; title?: string; userEmail?: string;
+  };
+  if (!serviceId || !amountInCents || amountInCents < 100) {
+    return res.status(400).json({ error: "Dados inválidos. Valor mínimo: R$ 1,00." });
+  }
+  if (!userEmail || !userEmail.includes("@")) {
+    return res.status(400).json({ error: "E-mail do pagador é obrigatório." });
+  }
+  const amountInReais = amountInCents / 100;
+  const client = getMpClient();
+  const mpPayment = new Payment(client);
+  const result = await mpPayment.create({
+    body: {
+      transaction_amount: amountInReais,
+      payment_method_id: "pix",
+      payer: { email: userEmail },
+      description: title || "Serviço SOLICITE",
+      external_reference: serviceId,
+    },
+    requestOptions: { idempotencyKey: `solicite-cp-${serviceId}` },
+  }).catch((e: any) => { throw e; });
+
+  const paymentId = result.id?.toString();
+  const qrCode   = result.point_of_interaction?.transaction_data?.qr_code_base64;
+  const pixCode  = result.point_of_interaction?.transaction_data?.qr_code;
+
+  if (!paymentId || !pixCode) throw new Error("Resposta inválida do Mercado Pago.");
+
+  await db.insert(servicePaymentsTable).values({
+    serviceId, paymentId, amount: amountInCents, status: "pending", pixCode,
+  }).onConflictDoUpdate({
+    target: servicePaymentsTable.serviceId,
+    set: { paymentId, amount: amountInCents, status: "pending", pixCode },
+  });
+
+  logger.info({ serviceId, paymentId, amountInReais }, "[payment/create-payment alias] PIX criado");
+  return res.json({ paymentId, qrCode: qrCode ?? "", pixCode, isTestMode: false });
+});
+
+// GET /api/payment-status/:id → mesmo que GET /api/payment/status/:serviceId
+router.get("/payment-status/:id", async (req, res) => {
+  req.params.serviceId = req.params.id;
+  const { id: serviceId } = req.params;
+
+  const [payment] = await db
+    .select().from(servicePaymentsTable)
+    .where(eq(servicePaymentsTable.serviceId, serviceId)).limit(1);
+
+  if (!payment) return res.json({ status: "not_found" });
+  if (payment.status === "retained" || payment.status === "released") {
+    return res.json({ status: payment.status });
+  }
+  if (payment.status === "paid") {
+    const now = new Date();
+    await db.update(servicePaymentsTable)
+      .set({ status: "retained", retainedAt: now })
+      .where(eq(servicePaymentsTable.serviceId, serviceId));
+    return res.json({ status: "retained" });
+  }
+  if (!payment.paymentId) return res.json({ status: payment.status });
+
+  try {
+    const client = getMpClient();
+    const mpPay = new Payment(client);
+    const info = await mpPay.get({ id: parseInt(payment.paymentId) });
+    if (info.status === "approved") {
+      const now = new Date();
+      await db.update(servicePaymentsTable)
+        .set({ status: "retained", paidAt: now, retainedAt: now })
+        .where(eq(servicePaymentsTable.serviceId, serviceId));
+      return res.json({ status: "retained" });
+    }
+    return res.json({ status: payment.status, mpStatus: info.status });
+  } catch (e: any) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 export default router;
