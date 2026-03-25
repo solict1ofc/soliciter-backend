@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -44,49 +43,38 @@ function ServiceBlock({ service }: { service: Service }) {
   const { startService, finalizeService, provider, PLATFORM_FEE_RATE } = useApp();
   const [starting, setStarting] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [confirmStart, setConfirmStart] = useState(false);
+  const [confirmFinalize, setConfirmFinalize] = useState(false);
 
   const fee = provider.plan === "free"
     ? service.finalValue * PLATFORM_FEE_RATE
     : 0;
   const providerEarning = service.finalValue - fee;
 
-  const handleStart = () => {
-    Alert.alert(
-      "Iniciar Serviço",
-      "Confirme que você está iniciando a execução do serviço.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Iniciar",
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            setStarting(true);
-            await startService(service.id);
-            setStarting(false);
-          },
-        },
-      ]
-    );
+  const handleStart = async () => {
+    if (!confirmStart) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setConfirmStart(true);
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setConfirmStart(false);
+    setStarting(true);
+    await startService(service.id);
+    setStarting(false);
   };
 
-  const handleFinalize = () => {
-    Alert.alert(
-      "Finalizar Serviço",
-      "Confirme que o serviço foi concluído. O cliente será notificado para confirmar o pagamento.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Finalizar",
-          style: "default",
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            setFinalizing(true);
-            await finalizeService(service.id);
-            setFinalizing(false);
-          },
-        },
-      ]
-    );
+  const handleFinalize = async () => {
+    if (!confirmFinalize) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setConfirmFinalize(true);
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setConfirmFinalize(false);
+    setFinalizing(true);
+    await finalizeService(service.id);
+    setFinalizing(false);
   };
 
   const isAccepted = service.status === "accepted";
@@ -236,50 +224,96 @@ function ServiceBlock({ service }: { service: Service }) {
 
       {/* ── INICIAR SERVIÇO ── */}
       {isAccepted && (
-        <Pressable
-          style={({ pressed }) => [styles.bigActionBtn, { backgroundColor: C.accent }, pressed && styles.actionBtnPressed]}
-          onPress={handleStart}
-          disabled={starting}
-        >
-          {starting ? (
-            <ActivityIndicator color="#fff" size="large" />
-          ) : (
-            <View style={styles.bigActionBtnInner}>
-              <View style={styles.bigActionIconWrap}>
-                <Ionicons name="play-circle" size={36} color="#fff" />
-              </View>
-              <View>
-                <Text style={[styles.bigActionBtnTitle, { color: "#fff" }]}>Iniciar Serviço</Text>
-                <Text style={[styles.bigActionBtnSub, { color: "rgba(255,255,255,0.7)" }]}>
-                  Toque para confirmar início
-                </Text>
-              </View>
+        confirmStart ? (
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmText}>Confirmar início do serviço?</Text>
+            <View style={styles.confirmBtns}>
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: C.backgroundTertiary }]}
+                onPress={() => setConfirmStart(false)}
+              >
+                <Text style={[styles.confirmBtnText, { color: C.textSecondary }]}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: C.accent }]}
+                onPress={handleStart}
+                disabled={starting}
+              >
+                {starting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={[styles.confirmBtnText, { color: "#fff" }]}>Confirmar</Text>}
+              </Pressable>
             </View>
-          )}
-        </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.bigActionBtn, { backgroundColor: C.accent }, pressed && styles.actionBtnPressed]}
+            onPress={handleStart}
+            disabled={starting}
+          >
+            {starting ? (
+              <ActivityIndicator color="#fff" size="large" />
+            ) : (
+              <View style={styles.bigActionBtnInner}>
+                <View style={styles.bigActionIconWrap}>
+                  <Ionicons name="play-circle" size={36} color="#fff" />
+                </View>
+                <View>
+                  <Text style={[styles.bigActionBtnTitle, { color: "#fff" }]}>Iniciar Serviço</Text>
+                  <Text style={[styles.bigActionBtnSub, { color: "rgba(255,255,255,0.7)" }]}>
+                    Toque para iniciar a execução
+                  </Text>
+                </View>
+              </View>
+            )}
+          </Pressable>
+        )
       )}
 
       {/* ── FINALIZAR SERVIÇO ── */}
       {isInProgress && (
-        <Pressable
-          style={({ pressed }) => [styles.bigActionBtn, { backgroundColor: C.success }, pressed && styles.actionBtnPressed]}
-          onPress={handleFinalize}
-          disabled={finalizing}
-        >
-          {finalizing ? (
-            <ActivityIndicator color="#000" size="large" />
-          ) : (
-            <View style={styles.bigActionBtnInner}>
-              <View style={[styles.bigActionIconWrap, { backgroundColor: "rgba(0,0,0,0.15)" }]}>
-                <Ionicons name="checkmark-done-circle" size={36} color="#000" />
-              </View>
-              <View>
-                <Text style={styles.bigActionBtnTitle}>Finalizar Serviço</Text>
-                <Text style={styles.bigActionBtnSub}>Serviço concluído? Toque aqui</Text>
-              </View>
+        confirmFinalize ? (
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmText}>Confirmar conclusão do serviço?</Text>
+            <View style={styles.confirmBtns}>
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: C.backgroundTertiary }]}
+                onPress={() => setConfirmFinalize(false)}
+              >
+                <Text style={[styles.confirmBtnText, { color: C.textSecondary }]}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmBtn, { backgroundColor: C.success }]}
+                onPress={handleFinalize}
+                disabled={finalizing}
+              >
+                {finalizing
+                  ? <ActivityIndicator color="#000" size="small" />
+                  : <Text style={[styles.confirmBtnText, { color: "#000" }]}>Confirmar</Text>}
+              </Pressable>
             </View>
-          )}
-        </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.bigActionBtn, { backgroundColor: C.success }, pressed && styles.actionBtnPressed]}
+            onPress={handleFinalize}
+            disabled={finalizing}
+          >
+            {finalizing ? (
+              <ActivityIndicator color="#000" size="large" />
+            ) : (
+              <View style={styles.bigActionBtnInner}>
+                <View style={[styles.bigActionIconWrap, { backgroundColor: "rgba(0,0,0,0.15)" }]}>
+                  <Ionicons name="checkmark-done-circle" size={36} color="#000" />
+                </View>
+                <View>
+                  <Text style={styles.bigActionBtnTitle}>Finalizar Serviço</Text>
+                  <Text style={styles.bigActionBtnSub}>Serviço concluído? Toque aqui</Text>
+                </View>
+              </View>
+            )}
+          </Pressable>
+        )
       )}
 
       {isCompleted && (
@@ -1019,6 +1053,35 @@ const styles = StyleSheet.create({
   actionBtnPressed: {
     opacity: 0.85,
     transform: [{ scale: 0.98 }],
+  },
+  confirmRow: {
+    backgroundColor: C.backgroundSecondary,
+    borderRadius: 14,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  confirmText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+    color: C.text,
+    textAlign: "center",
+  },
+  confirmBtns: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  confirmBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  confirmBtnText: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
   },
   actionBtnText: {
     fontSize: 16,

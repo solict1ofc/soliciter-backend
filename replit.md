@@ -114,13 +114,14 @@ End-to-end Pix payment flow using Mercado Pago SDK v2:
   - `app.ts` — webhook at `POST /api/payment/webhook` — receives MP notifications, fetches payment status, updates DB on `approved`
 - **Mobile flow** (`artifacts/mobile/app/(tabs)/index.tsx`):
   1. User fills service form → creates service with `pending_payment` status
-  2. Payment step shows "Gerar QR Code Pix" button
+  2. **QR auto-generated immediately** when payment step is shown (no second button tap needed)
   3. App calls `POST /api/payment/create-payment` → gets QR code (base64) + copy-paste code
   4. QR code displayed inline — user scans in their banking app
   5. Auto-polls `/api/payment/status/:serviceId` every 3 seconds
   6. MP webhook fires `approved` → DB updated to `paid`
   7. On `paid` status, `confirmPayment()` called → service becomes `available` in marketplace
   8. "Já Paguei" button for manual verification
+  - For existing `pending_payment` cards: **QR auto-generated when modal opens** (no second tap)
 - **Platform fee**: 10% only for "free" plan providers; waived for basic/destaque/premium
 - **Escrow model**: client pays upfront via Pix, funds held in platform until service completion
 - **Env var**: `MERCADO_PAGO_ACCESS_TOKEN` — required in both dev and production
@@ -134,6 +135,8 @@ Provider plan selection UI exists in `profile.tsx`. Payment via Pix is pending i
 - **DB table**: `services` (`service_id`, `status`, `started_at`, `updated_at`)
 - **Backend**: `POST /api/iniciar-servico` — receives `{ serviceId }`, upserts status to `em_andamento`
 - **Mobile**: `startService()` in `AppContext.tsx` optimistically updates local state, calls API, reverts on failure
+- **"Iniciar Serviço" / "Finalizar Serviço"**: Inline two-tap confirmation UI (no `Alert.alert` dialog) in `provider.tsx` `ServiceBlock`
+- **Profile photo**: `expo-image-picker` used in `profile.tsx`; photo URI stored in `provider.photoUri` (AsyncStorage); displayed as circular avatar with camera overlay button
 
 ### `scripts` (`@workspace/scripts`)
 

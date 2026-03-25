@@ -72,6 +72,7 @@ export type ProviderProfile = {
   withdrawn: number;
   registered: boolean;
   registration?: ProviderRegistration;
+  photoUri?: string;
 };
 
 export const URGENT_FEE = 10;
@@ -434,6 +435,13 @@ function useAppContextValue() {
     [provider, saveProvider]
   );
 
+  const savePhoto = useCallback(
+    async (uri: string) => {
+      await saveProvider({ ...provider, photoUri: uri });
+    },
+    [provider, saveProvider]
+  );
+
   const availableServices = services.filter((s) => s.status === "available");
   const activeService = provider.activeServiceId
     ? services.find((s) => s.id === provider.activeServiceId)
@@ -457,6 +465,7 @@ function useAppContextValue() {
     activatePlan,
     registerProvider,
     withdrawEarnings,
+    savePhoto,
     PLATFORM_FEE_RATE,
     URGENT_FEE,
   };

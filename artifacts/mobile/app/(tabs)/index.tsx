@@ -911,6 +911,22 @@ export default function SolicitacoesScreen() {
       });
       setPendingId(svc.id);
       setFormStep("payment");
+      setGeneratingPix(true);
+      try {
+        const amountInCents = Math.round(svc.finalValue * 100);
+        const res = await fetch(`${API_BASE}/payment/create-payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serviceId: svc.id, amountInCents, title: svc.title, userEmail: user?.email }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode });
+        }
+      } catch {
+      } finally {
+        setGeneratingPix(false);
+      }
     } finally {
       setCreating(false);
     }
@@ -974,7 +990,27 @@ export default function SolicitacoesScreen() {
     const svc = services.find((s) => s.id === serviceId);
     if (!svc) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPixModal({ serviceId, svc, pixData: null, generating: false, checking: false });
+    setPixModal({ serviceId, svc, pixData: null, generating: true, checking: false });
+    try {
+      const amountInCents = Math.round(svc.finalValue * 100);
+      const res = await fetch(`${API_BASE}/payment/create-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceId, amountInCents, title: svc.title, userEmail: user?.email }),
+      });
+      if (!res.ok) {
+        setPixModal((m) => m && { ...m, generating: false });
+        return;
+      }
+      const data = await res.json();
+      setPixModal((m) => m && {
+        ...m,
+        generating: false,
+        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode },
+      });
+    } catch {
+      setPixModal((m) => m && { ...m, generating: false });
+    }
   };
 
   // ─── Generate Pix inside modal ─────────────────────────────────────────────

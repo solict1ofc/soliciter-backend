@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -121,8 +122,36 @@ type WithdrawMethod = "pix" | "bank";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { provider, activatePlan, pendingEarnings, withdrawEarnings } = useApp();
+  const { provider, activatePlan, pendingEarnings, withdrawEarnings, savePhoto } = useApp();
   const { user, logout, refreshUser } = useAuth();
+
+  const [pickingPhoto, setPickingPhoto] = useState(false);
+
+  const handlePickPhoto = async () => {
+    if (pickingPhoto) return;
+    setPickingPhoto(true);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permissão necessária", "Permita o acesso à galeria para adicionar uma foto.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.6,
+      });
+      if (!result.canceled && result.assets[0]) {
+        await savePhoto(result.assets[0].uri);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      Alert.alert("Erro", "Não foi possível carregar a foto.");
+    } finally {
+      setPickingPhoto(false);
+    }
+  };
 
   // Refresh isPremium every time this tab is focused
   useFocusEffect(
@@ -318,18 +347,31 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileCard}>
-          <View style={styles.avatarWrapper}>
+          <Pressable style={styles.avatarWrapper} onPress={handlePickPhoto} disabled={pickingPhoto}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {provider.name.charAt(0).toUpperCase()}
-              </Text>
+              {provider.photoUri ? (
+                <Image
+                  source={{ uri: provider.photoUri }}
+                  style={{ width: 80, height: 80, borderRadius: 40 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {provider.name ? provider.name.charAt(0).toUpperCase() : "?"}
+                </Text>
+              )}
+            </View>
+            <View style={styles.cameraOverlay}>
+              {pickingPhoto
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Ionicons name="camera" size={14} color="#fff" />}
             </View>
             {provider.plan === "premium" && (
               <View style={styles.premiumBadge}>
                 <Ionicons name="diamond" size={12} color={C.gold} />
               </View>
             )}
-          </View>
+          </Pressable>
 
           <Text style={styles.profileName}>{provider.name}</Text>
 
@@ -1090,11 +1132,25 @@ const styles = StyleSheet.create({
     borderColor: C.primary,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   avatarText: {
     fontSize: 32,
     fontFamily: "Inter_700Bold",
     color: C.primary,
+  },
+  cameraOverlay: {
+    position: "absolute",
+    bottom: -2,
+    left: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: C.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: C.background,
   },
   premiumBadge: {
     position: "absolute",
