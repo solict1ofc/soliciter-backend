@@ -157,18 +157,17 @@ export default function ProfileScreen() {
     }, [refreshUser])
   );
 
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+
   const handleLogout = () => {
-    Alert.alert("Sair da conta", "Tem certeza que deseja sair?", [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Sair",
-        style: "destructive",
-        onPress: () => {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          logout();
-        },
-      },
-    ]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setLogoutConfirmVisible(true);
+  };
+
+  const confirmLogout = () => {
+    setLogoutConfirmVisible(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    logout();
   };
   const [selectedPlan, setSelectedPlan] = useState<PlanConfig | null>(null);
 
@@ -872,6 +871,57 @@ export default function ProfileScreen() {
             </View>
           </View>
         )}
+      </Modal>
+
+      {/* ── MODAL DE CONFIRMAÇÃO DE LOGOUT ── */}
+      <Modal
+        visible={logoutConfirmVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLogoutConfirmVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { alignItems: "center", paddingVertical: 32 }]}>
+            <View style={{
+              width: 64, height: 64, borderRadius: 32,
+              backgroundColor: "rgba(255,59,92,0.1)",
+              borderWidth: 1.5, borderColor: "rgba(255,59,92,0.3)",
+              alignItems: "center", justifyContent: "center", marginBottom: 18,
+            }}>
+              <Ionicons name="log-out-outline" size={30} color={C.danger} />
+            </View>
+            <Text style={[styles.modalTitle, { textAlign: "center", marginBottom: 8 }]}>Sair da conta?</Text>
+            <Text style={[styles.planModalSubtitle, { textAlign: "center", marginBottom: 28 }]}>
+              Você será desconectado e precisará fazer login novamente.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 12, width: "100%" }}>
+              <Pressable
+                style={({ pressed }) => [{
+                  flex: 1, height: 48, borderRadius: 12,
+                  backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+                  alignItems: "center", justifyContent: "center",
+                  opacity: pressed ? 0.75 : 1,
+                }]}
+                onPress={() => setLogoutConfirmVisible(false)}
+              >
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 15, color: C.text }}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [{
+                  flex: 1, height: 48, borderRadius: 12,
+                  backgroundColor: C.danger,
+                  alignItems: "center", justifyContent: "center",
+                  flexDirection: "row", gap: 6,
+                  opacity: pressed ? 0.85 : 1,
+                }]}
+                onPress={confirmLogout}
+              >
+                <Ionicons name="log-out-outline" size={18} color="#fff" />
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#fff" }}>Sair</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
       </Modal>
 
     </View>
