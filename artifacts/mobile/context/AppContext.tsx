@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 
-const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
 export type ServiceStatus =
   | "pending_payment"
