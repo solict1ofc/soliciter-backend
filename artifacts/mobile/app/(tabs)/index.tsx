@@ -420,6 +420,14 @@ export default function SolicitacoesScreen() {
         const { status } = await res.json();
         if (status === "retained" || status === "paid") {
           await confirmPaid();
+        } else if (status === "cancelled" || status === "rejected" || status === "refunded") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          Alert.alert(
+            "Pagamento não aprovado",
+            "O PIX foi recusado ou cancelado. Tente novamente ou use outro método.",
+            [{ text: "OK", onPress: () => { setFormStep("form"); setPixData(null); setPendingServiceId(null); } }]
+          );
         }
       } catch {}
     }, 4000);
@@ -468,7 +476,9 @@ export default function SolicitacoesScreen() {
     setPixChecking(true);
     try {
       const res = await fetch(`${API_BASE}/payment/status/${pendingServiceId}`);
-      const { status } = await res.json();
+      const data = await res.json();
+      const { status } = data;
+
       if (status === "retained" || status === "paid") {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         await confirmPayment(pendingServiceId);
@@ -476,11 +486,21 @@ export default function SolicitacoesScreen() {
         setPixData(null);
         setFormStep("success");
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else if (status === "cancelled" || status === "rejected" || status === "refunded") {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        Alert.alert(
+          "Pagamento não aprovado",
+          "O PIX foi recusado ou cancelado. Tente criar uma nova solicitação.",
+          [{ text: "OK", onPress: () => { setFormStep("form"); setPixData(null); setPendingServiceId(null); } }]
+        );
       } else {
-        Alert.alert("Não confirmado ainda", "O pagamento ainda não foi identificado. Tente novamente em alguns segundos.");
+        Alert.alert(
+          "Aguardando pagamento",
+          "O pagamento ainda não foi identificado pelo Mercado Pago. Pague o PIX e tente novamente em alguns segundos."
+        );
       }
     } catch {
-      Alert.alert("Erro de conexão", "Não foi possível verificar o pagamento.");
+      Alert.alert("Erro de conexão", "Não foi possível verificar o pagamento. Verifique sua internet.");
     } finally {
       setPixChecking(false);
     }
