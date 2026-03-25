@@ -9,6 +9,7 @@ import { rm } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(artifactDir, "../..");
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
@@ -22,11 +23,13 @@ async function buildAll() {
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
-    // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
-    // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
-    // Examples of unbundleable packages:
-    // - uses native modules and loads them dynamically (e.g. sharp)
-    // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
+    // Resolve workspace packages by direct path so npm/pnpm/yarn all work equally
+    alias: {
+      "@workspace/db": path.resolve(repoRoot, "lib/db/src/index.ts"),
+      "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
+      "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
+    },
+    // Some packages may not be bundleable, so we externalize them
     external: [
       "*.node",
       "sharp",
