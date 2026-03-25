@@ -3,8 +3,7 @@ services:
     name: solicite
     runtime: node
     plan: starter
-    rootDir: server
-    buildCommand: npm install && node build.mjs
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
