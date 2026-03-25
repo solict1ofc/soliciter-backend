@@ -176,7 +176,6 @@ function useAppContextValue() {
       urgent: boolean;
     }) => {
       const isPremium = user?.isPremium ?? false;
-      // Premium users get automatic urgency at no extra cost
       const isUrgent = isPremium ? true : data.urgent;
       const urgencyFee = isPremium ? 0 : (data.urgent ? URGENT_FEE : 0);
       const finalValue = data.value + urgencyFee;
@@ -191,7 +190,7 @@ function useAppContextValue() {
         neighborhood: data.neighborhood,
         urgent: isUrgent,
         priority: isUrgent,
-        status: "available",
+        status: "pending_payment",
         createdAt: new Date().toISOString(),
         chatMessages: [],
       };
@@ -201,12 +200,48 @@ function useAppContextValue() {
     [services, saveServices, user]
   );
 
-  // ─── 2. Cliente paga → available ──────────────────────────────────────────
+  // ─── 1b. Cliente cria pagamento PIX (vai para conta da plataforma) ─────────
+  const createPayment = useCallback(
+    async (serviceId: string, amountInCents: number, title: string) => {
+      const res = await fetch(`${API_BASE}/payment/create-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId,
+          amountInCents,
+          title,
+          userEmail: user?.email || "cliente@solicite.app",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error || "Falha ao criar pagamento PIX");
+      }
+      return await res.json() as {
+        paymentId: string;
+        qrCode: string;
+        pixCode: string;
+        isTestMode: boolean;
+      };
+    },
+    [user]
+  );
+
+  // ─── 2. Pagamento confirmado → available ──────────────────────────────────
   const confirmPayment = useCallback(
     async (serviceId: string) => {
       const updated = services.map((s) =>
         s.id === serviceId ? { ...s, status: "available" as ServiceStatus } : s
       );
+      await saveServices(updated);
+    },
+    [services, saveServices]
+  );
+
+  // ─── 2b. Cancelar serviço com pagamento pendente ──────────────────────────
+  const cancelPendingService = useCallback(
+    async (serviceId: string) => {
+      const updated = services.filter((s) => s.id !== serviceId);
       await saveServices(updated);
     },
     [services, saveServices]
@@ -284,7 +319,7 @@ function useAppContextValue() {
     [services, saveServices]
   );
 
-  // ─── 6. Cliente confirma e avalia → rated ─────────────────────────────────
+  // ─── 6. Cliente confirma e avalia → rated + libera pagamento ─────────────
   const confirmAndRate = useCallback(
     async (serviceId: string, rating: number) => {
       const service = services.find((s) => s.id === serviceId);
@@ -319,6 +354,13 @@ function useAppContextValue() {
         rating: Math.round(newRating * 10) / 10,
         totalRatings,
       });
+
+      // Liberar pagamento retido → 90% prestador / 10% plataforma (melhor esforço)
+      fetch(`${API_BASE}/payment/release/${serviceId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerId: service.providerId }),
+      }).catch(() => {});
 
       return { fee, providerEarning, platformFeeApplied: provider.plan === "free" };
     },
@@ -421,7 +463,9 @@ function useAppContextValue() {
     pendingEarnings,
     loading,
     createService,
+    createPayment,
     confirmPayment,
+    cancelPendingService,
     acceptService,
     startService,
     finalizeService,

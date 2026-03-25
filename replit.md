@@ -95,22 +95,26 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 
 Expo React Native app — "SOLICITE" services marketplace. Dark tech design (cyan/navy palette).
 - 4 tabs: Solicitations, Global marketplace, Provider area, Profile
-- Service lifecycle: `available → accepted → in_progress → completed → rated`
-- **MVP (Play Store launch)**: No payment integration — services publish directly as `available`, no Pix/escrow/Mercado Pago. Payment will be added in a future update.
-- Key files: `app/(tabs)/index.tsx` (client flow), `app/(tabs)/global.tsx` (marketplace), `app/(tabs)/provider.tsx` (provider), `context/AppContext.tsx`
+- **Service lifecycle**: `pending_payment → available → accepted → in_progress → completed → rated`
+- **Marketplace payment system**: PIX via Mercado Pago → platform account → retained until service finalized → released (90% provider / 10% platform) on client confirmation
+- Key files: `app/(tabs)/index.tsx` (client flow + PIX payment step), `app/(tabs)/global.tsx` (marketplace), `app/(tabs)/provider.tsx` (provider), `context/AppContext.tsx`
 - Chat available after service is accepted
 - AsyncStorage keys: `servicosapp_services_v2` (services), `servicosapp_provider_v3` (provider)
 - `EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN` — used to construct API URL: `https://${EXPO_PUBLIC_DOMAIN}/api`
 
-### Payment (MVP — REMOVED for Play Store launch)
+### Payment System (Marketplace Escrow)
 
-All client-side payment flows have been removed for the MVP launch:
-- `createService()` in `AppContext.tsx` creates services with `status: "available"` directly (no `pending_payment`, no Pix QR code)
-- `PixModal` component deleted from `index.tsx`
-- `RatingModal` now shows clean confirm+rate UI (no payment release language)
-- Profile: `handleSubscribe` shows "Em breve" alert; withdrawal button shows "Em breve" alert
-- Backend payment routes (`routes/payment.ts`, `routes/pix.ts`) still exist but are not called by mobile
-- **Future**: Mercado Pago Pix escrow will be added in a post-MVP update
+Full marketplace payment flow implemented:
+- `createService()` sets `status: "pending_payment"` — service not yet visible to providers
+- `createPayment()` calls `POST /api/payment/create-payment` → returns PIX QR code + copia-e-cola code
+- `index.tsx` shows 3-step bar: Dados → Pagamento → Publicado
+- Payment step: QR code image, copia-e-cola button, auto-poll every 4s via `GET /api/payment/status/:serviceId`
+- When payment confirmed: DB status → `"retained"` (funds held by platform); service → `"available"` in mobile
+- `confirmAndRate()` calls `POST /api/payment/release/:serviceId` → releases 90% to provider, 10% to platform
+- **Test mode**: No `MERCADO_PAGO_ACCESS_TOKEN` configured → generates test PIX code, confirms payment immediately on first status poll
+- **DB table** `service_payments`: `serviceId`, `paymentId`, `amount`, `status` (pending/test_pending/retained/released), `pixCode`, `providerId`, `providerAmount`, `platformAmount`, `createdAt`, `paidAt`, `retainedAt`, `releasedAt`
+- `PLATFORM_FEE_RATE = 0.10` (10% platform fee on all paid services)
+- Backend routes: `POST /api/payment/create-payment`, `GET /api/payment/status/:serviceId`, `POST /api/payment/release/:serviceId`
 
 ### Subscription Plans (Plano Assinatura)
 

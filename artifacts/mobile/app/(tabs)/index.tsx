@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -28,7 +30,7 @@ const C = Colors.dark;
 
 // ─── Status config ───────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  pending_payment: { label: "Publicando...",          color: C.primary,       icon: "time-outline" },
+  pending_payment: { label: "Aguardando Pagamento",   color: C.warning,       icon: "card-outline" },
   available:       { label: "Disponível no Global",   color: C.primary,       icon: "globe-outline" },
   accepted:        { label: "Aceito pelo Prestador",  color: C.accent,        icon: "person-add-outline" },
   in_progress:     { label: "Em Andamento",           color: "#FF9500",       icon: "construct-outline" },
@@ -37,9 +39,9 @@ const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon:
 };
 
 // ─── Step progress bar ───────────────────────────────────────────────────────
-function StepBar({ step }: { step: "form" | "success" }) {
-  const steps = ["Dados", "Publicado"];
-  const active = step === "form" ? 0 : 1;
+function StepBar({ step }: { step: "form" | "payment" | "success" }) {
+  const steps = ["Dados", "Pagamento", "Publicado"];
+  const active = step === "form" ? 0 : step === "payment" ? 1 : 2;
   return (
     <View style={styles.stepBar}>
       {steps.map((label, i) => {
@@ -354,7 +356,13 @@ function RatingModal({
 export default function SolicitacoesScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { services, createService, confirmAndRate, URGENT_FEE, provider } = useApp();
+  const {
+    services, createService, createPayment, confirmPayment, cancelPendingService,
+    confirmAndRate, URGENT_FEE, provider,
+  } = useApp();
+
+  const API_BASE = process.env.EXPO_PUBLIC_API_URL
+    ?? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
   const isPremium = user?.isPremium ?? false;
 
@@ -368,7 +376,15 @@ export default function SolicitacoesScreen() {
   const [neighborhood, setNeighborhood] = useState("");
   const [urgent, setUrgent]             = useState(false);
   const [creating, setCreating]         = useState(false);
-  const [formStep, setFormStep]         = useState<"form" | "success">("form");
+  const [formStep, setFormStep]         = useState<"form" | "payment" | "success">("form");
+
+  // Payment step state
+  type PixData = { paymentId: string; qrCode: string; pixCode: string; isTestMode: boolean };
+  const [pixData, setPixData]                   = useState<PixData | null>(null);
+  const [pendingServiceId, setPendingServiceId] = useState<string | null>(null);
+  const [pixCopied, setPixCopied]               = useState(false);
+  const [pixChecking, setPixChecking]           = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Rating/confirm modal
   const [ratingService, setRatingService] = useState<Service | null>(null);
@@ -383,7 +399,37 @@ export default function SolicitacoesScreen() {
   );
   const pendingCount = myServices.filter((s) => s.status === "completed").length;
 
-  // ─── Create service ────────────────────────────────────────────────────────
+  // ─── Auto-poll para confirmar pagamento ───────────────────────────────────
+  useEffect(() => {
+    if (formStep !== "payment" || !pendingServiceId) return;
+
+    const confirmPaid = async () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+      await confirmPayment(pendingServiceId);
+      setPendingServiceId(null);
+      setPixData(null);
+      setFormStep("success");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    };
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/payment/status/${pendingServiceId}`);
+        if (!res.ok) return;
+        const { status } = await res.json();
+        if (status === "retained" || status === "paid") {
+          await confirmPaid();
+        }
+      } catch {}
+    }, 4000);
+
+    return () => {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, [formStep, pendingServiceId]);
+
+  // ─── Create service → payment ──────────────────────────────────────────────
   const handleCreate = async () => {
     if (!title.trim() || !description.trim() || !value.trim()) {
       Alert.alert("Campos obrigatórios", "Preencha título, descrição e valor.");
@@ -400,14 +446,65 @@ export default function SolicitacoesScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCreating(true);
     try {
-      await createService({
+      const newService = await createService({
         title: title.trim(), description: description.trim(),
         value: numericValue, city, neighborhood: neighborhood.trim(), urgent,
       });
-      setFormStep("success");
+      const amountInCents = Math.round(finalValue * 100);
+      const pix = await createPayment(newService.id, amountInCents, title.trim());
+      setPixData(pix);
+      setPendingServiceId(newService.id);
+      setFormStep("payment");
+    } catch (err: any) {
+      Alert.alert("Erro ao criar pagamento", err?.message ?? "Tente novamente.");
     } finally {
       setCreating(false);
     }
+  };
+
+  // ─── Verificar manualmente pagamento ──────────────────────────────────────
+  const handleCheckPayment = async () => {
+    if (!pendingServiceId || pixChecking) return;
+    setPixChecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/payment/status/${pendingServiceId}`);
+      const { status } = await res.json();
+      if (status === "retained" || status === "paid") {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        await confirmPayment(pendingServiceId);
+        setPendingServiceId(null);
+        setPixData(null);
+        setFormStep("success");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert("Não confirmado ainda", "O pagamento ainda não foi identificado. Tente novamente em alguns segundos.");
+      }
+    } catch {
+      Alert.alert("Erro de conexão", "Não foi possível verificar o pagamento.");
+    } finally {
+      setPixChecking(false);
+    }
+  };
+
+  // ─── Cancelar pagamento pendente ───────────────────────────────────────────
+  const handleCancelPayment = () => {
+    Alert.alert(
+      "Cancelar pagamento",
+      "O serviço será removido. Tem certeza?",
+      [
+        { text: "Não", style: "cancel" },
+        {
+          text: "Sim, cancelar",
+          style: "destructive",
+          onPress: async () => {
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            if (pendingServiceId) await cancelPendingService(pendingServiceId);
+            setPixData(null); setPendingServiceId(null);
+            setFormStep("form");
+          },
+        },
+      ]
+    );
   };
 
   const handleConfirmAndRate = async (rating: number) => {
@@ -420,9 +517,11 @@ export default function SolicitacoesScreen() {
   };
 
   const handleReset = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     setTitle(""); setDescription(""); setValue("");
     setCity("Goiânia"); setNeighborhood("");
     setUrgent(false); setFormStep("form");
+    setPixData(null); setPendingServiceId(null);
   };
 
   return (
@@ -575,6 +674,111 @@ export default function SolicitacoesScreen() {
               </View>
             )}
 
+            {formStep === "payment" && pixData && (
+              <View style={styles.card}>
+                {/* Escrow info */}
+                <View style={styles.escrowBadge}>
+                  <Ionicons name="lock-closed-outline" size={16} color={C.warning} />
+                  <Text style={styles.escrowText}>
+                    O valor fica retido pela plataforma e liberado ao prestador após o serviço.
+                  </Text>
+                </View>
+
+                <Text style={[styles.sectionLabel, { textAlign: "center", marginBottom: 4 }]}>
+                  Pague via PIX
+                </Text>
+                <Text style={[styles.fieldHint, { textAlign: "center", marginBottom: 12 }]}>
+                  Valor:{" "}
+                  <Text style={{ color: C.text, fontFamily: "Inter_700Bold" }}>
+                    R$ {finalValue.toFixed(2)}
+                  </Text>
+                  {pixData.isTestMode && (
+                    <Text style={{ color: C.warning }}> · Modo Teste</Text>
+                  )}
+                </Text>
+
+                {/* QR Code */}
+                {pixData.qrCode ? (
+                  <View style={styles.qrWrapper}>
+                    <Image
+                      source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
+                      style={styles.qrImage}
+                      resizeMode="contain"
+                    />
+                    <Text style={styles.qrHint}>Escaneie o QR Code com o app do seu banco</Text>
+                  </View>
+                ) : null}
+
+                {/* Divider */}
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OU COPIE O CÓDIGO</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Copy code */}
+                <Pressable
+                  style={styles.copyCodeBtn}
+                  onPress={async () => {
+                    await Clipboard.setStringAsync(pixData.pixCode);
+                    setPixCopied(true);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setTimeout(() => setPixCopied(false), 3000);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.copyCodeLabel}>Código Pix Copia e Cola</Text>
+                    <Text style={styles.copyCodeValue} numberOfLines={2}>
+                      {pixData.pixCode.slice(0, 60)}...
+                    </Text>
+                  </View>
+                  <View style={styles.copyIconWrap}>
+                    <Ionicons
+                      name={pixCopied ? "checkmark" : "copy-outline"}
+                      size={18}
+                      color={pixCopied ? C.success : C.primary}
+                    />
+                  </View>
+                </Pressable>
+
+                {/* Polling indicator */}
+                <View style={styles.pollingBadge}>
+                  <ActivityIndicator size="small" color={C.primary} />
+                  <Text style={styles.pollingText}>
+                    {pixData.isTestMode
+                      ? "Modo teste — confirmando automaticamente..."
+                      : "Aguardando confirmação do pagamento..."}
+                  </Text>
+                </View>
+
+                {/* Manual check button */}
+                <Pressable
+                  style={({ pressed }) => [styles.payBtn, pressed && { opacity: 0.85 }]}
+                  onPress={handleCheckPayment}
+                  disabled={pixChecking}
+                >
+                  {pixChecking ? (
+                    <ActivityIndicator color="#000" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+                      <Text style={styles.payBtnText}>Já paguei — Verificar</Text>
+                    </>
+                  )}
+                </Pressable>
+
+                <Text style={styles.payNote}>
+                  Após confirmar o pagamento, o serviço será publicado no Mercado Global para os prestadores.
+                </Text>
+
+                {/* Cancel */}
+                <Pressable onPress={handleCancelPayment} style={styles.ghostBtn}>
+                  <Ionicons name="close-circle-outline" size={16} color={C.danger} />
+                  <Text style={[styles.ghostBtnText, { color: C.danger }]}>Cancelar solicitação</Text>
+                </Pressable>
+              </View>
+            )}
+
             {formStep === "success" && (
               <SuccessScreen
                 neighborhood={neighborhood}
@@ -713,6 +917,9 @@ const styles = StyleSheet.create({
     borderRadius: 20, padding: 20, gap: 16,
     borderWidth: 1, borderColor: C.border,
   },
+
+  sectionLabel: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.text },
+  fieldHint: { fontSize: 13, fontFamily: "Inter_400Regular", color: C.textSecondary },
 
   inputWrapper: { gap: 7 },
   inputHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
