@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,8 +22,6 @@ import { useApp } from "@/context/AppContext";
 import type { ProviderPlan } from "@/context/AppContext";
 import { SoliciteLogo } from "@/components/SoliciteLogo";
 import { useAuth } from "@/context/AuthContext";
-
-const API_BASE = `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
 const C = Colors.dark;
 
@@ -174,36 +171,6 @@ export default function ProfileScreen() {
     ]);
   };
   const [selectedPlan, setSelectedPlan] = useState<PlanConfig | null>(null);
-  const [subscribing, setSubscribing] = useState(false);
-
-  // Plan payment state
-  type PlanPixData = { qrCode: string; pixCode: string; paymentId: string; planKey: ProviderPlan };
-  const [planPixModal, setPlanPixModal] = useState<PlanPixData | null>(null);
-  const [planPixCopied, setPlanPixCopied] = useState(false);
-  const [planCheckingPayment, setPlanCheckingPayment] = useState(false);
-  const planPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Poll for plan payment confirmation
-  useEffect(() => {
-    if (!planPixModal) return;
-    planPollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${API_BASE}/payment/status/${planPixModal.paymentId}`);
-        if (!res.ok) return;
-        const { status } = await res.json();
-        if (status === "paid") {
-          clearInterval(planPollRef.current!);
-          planPollRef.current = null;
-          await activatePlan(planPixModal.planKey);
-          setPlanPixModal(null);
-          setSelectedPlan(null);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          Alert.alert("Plano Ativado! ✓", `Seu plano foi ativado com sucesso. Aproveite todos os benefícios!`);
-        }
-      } catch { /* ignore */ }
-    }, 3000);
-    return () => { if (planPollRef.current) clearInterval(planPollRef.current); };
-  }, [planPixModal?.paymentId]);
 
   const [withdrawModal, setWithdrawModal] = useState(false);
   const [withdrawMethod, setWithdrawMethod] = useState<WithdrawMethod>("pix");
@@ -239,31 +206,6 @@ export default function ProfileScreen() {
   const handleSubscribe = (_plan: PlanConfig) => {
     Alert.alert("Em breve", "Os planos estarão disponíveis na próxima versão do SOLICITE. Obrigado pela paciência!");
     setSelectedPlan(null);
-  };
-
-  const handlePlanAlreadyPaid = async () => {
-    if (!planPixModal) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPlanCheckingPayment(true);
-    try {
-      const res = await fetch(`${API_BASE}/payment/status/${planPixModal.paymentId}`);
-      if (!res.ok) throw new Error();
-      const { status } = await res.json();
-      if (status === "paid") {
-        if (planPollRef.current) { clearInterval(planPollRef.current); planPollRef.current = null; }
-        await activatePlan(planPixModal.planKey);
-        setPlanPixModal(null);
-        setSelectedPlan(null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Plano Ativado! ✓", "Seu plano foi ativado com sucesso!");
-      } else {
-        Alert.alert("Não confirmado", "O pagamento ainda não foi identificado. Aguarde e tente novamente.");
-      }
-    } catch {
-      Alert.alert("Erro", "Não foi possível verificar o pagamento.");
-    } finally {
-      setPlanCheckingPayment(false);
-    }
   };
 
   const currentPlan = plans.find((p) => p.key === provider.plan);
@@ -305,9 +247,10 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 160 }}
-        contentInsetAdjustmentBehavior="automatic"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.profileCard}>
           <Pressable style={styles.avatarWrapper} onPress={handlePickPhoto} disabled={pickingPhoto}>
@@ -902,100 +845,6 @@ export default function ProfileScreen() {
         )}
       </Modal>
 
-      {/* ── MODAL PAGAMENTO DO PLANO ── */}
-      <Modal
-        visible={false}
-        transparent
-        animationType="slide"
-        onRequestClose={() => {
-          if (!planCheckingPayment) {
-            if (planPollRef.current) { clearInterval(planPollRef.current); planPollRef.current = null; }
-            setPlanPixModal(null);
-          }
-        }}
-      >
-        {planPixModal && (
-          <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { maxHeight: "88%" }]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Pagar Plano via Pix</Text>
-                {!planCheckingPayment && (
-                  <Pressable
-                    onPress={() => {
-                      if (planPollRef.current) { clearInterval(planPollRef.current); planPollRef.current = null; }
-                      setPlanPixModal(null);
-                    }}
-                    style={styles.modalClose}
-                    hitSlop={12}
-                  >
-                    <Ionicons name="close-outline" size={20} color={C.textSecondary} />
-                  </Pressable>
-                )}
-              </View>
-
-              {/* Polling badge */}
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primaryGlow, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-                <ActivityIndicator size="small" color={C.primary} />
-                <Text style={{ color: C.primary, fontSize: 12, fontFamily: "Inter_500Medium" }}>
-                  Aguardando confirmação do pagamento...
-                </Text>
-              </View>
-
-              {/* QR Code */}
-              {planPixModal.qrCode ? (
-                <View style={{ alignItems: "center", marginBottom: 12 }}>
-                  <Image
-                    source={{ uri: `data:image/png;base64,${planPixModal.qrCode}` }}
-                    style={{ width: 200, height: 200, borderRadius: 12 }}
-                    resizeMode="contain"
-                  />
-                  <Text style={{ color: C.textSecondary, fontSize: 12, marginTop: 6 }}>
-                    Escaneie no app do seu banco
-                  </Text>
-                </View>
-              ) : (
-                <View style={{ alignItems: "center", marginBottom: 12, paddingVertical: 20 }}>
-                  <Ionicons name="qr-code-outline" size={48} color={C.textMuted} />
-                  <Text style={{ color: C.textSecondary, fontSize: 12, marginTop: 6 }}>
-                    Use o código Pix abaixo
-                  </Text>
-                </View>
-              )}
-
-              {/* Pix code copy */}
-              <Pressable
-                style={{ backgroundColor: C.surface, borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12, borderWidth: 1, borderColor: C.border }}
-                onPress={async () => {
-                  await Clipboard.setStringAsync(planPixModal.pixCode);
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                  setPlanPixCopied(true);
-                  setTimeout(() => setPlanPixCopied(false), 3000);
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: C.textSecondary, fontSize: 11, fontFamily: "Inter_500Medium" }}>Pix Copia e Cola</Text>
-                  <Text style={{ color: C.text, fontSize: 12, fontFamily: "Inter_600SemiBold" }} numberOfLines={1} ellipsizeMode="middle">
-                    {planPixModal.pixCode}
-                  </Text>
-                </View>
-                <View style={{ backgroundColor: planPixCopied ? C.success : C.primaryGlow, borderRadius: 8, padding: 8 }}>
-                  <Ionicons name={planPixCopied ? "checkmark" : "copy-outline"} size={16} color={planPixCopied ? "#000" : C.primary} />
-                </View>
-              </Pressable>
-
-              {planPixCopied && (
-                <Text style={{ color: C.success, fontSize: 12, textAlign: "center", marginBottom: 8, fontFamily: "Inter_600SemiBold" }}>
-                  ✓ Código copiado! Cole no app do seu banco.
-                </Text>
-              )}
-
-              <Text style={{ color: C.textMuted, fontSize: 11, textAlign: "center", marginTop: 10 }}>
-                🔒 Pagamento via Mercado Pago. Plano ativado automaticamente após confirmação do sistema.
-              </Text>
-            </View>
-          </View>
-        )}
-      </Modal>
     </View>
   );
 }

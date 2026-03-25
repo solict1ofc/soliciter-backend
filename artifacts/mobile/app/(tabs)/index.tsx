@@ -375,7 +375,7 @@ export default function SolicitacoesScreen() {
   const [confirming, setConfirming]       = useState(false);
   const [confirmDone, setConfirmDone]     = useState(false);
 
-  const numericValue = parseFloat(value.replace(",", ".")) || 0;
+  const numericValue = parseFloat(value.replace(/[^0-9,.]/g, "").replace(",", ".")) || 0;
   const finalValue   = isPremium ? numericValue : (urgent ? numericValue + URGENT_FEE : numericValue);
 
   const myServices = [...services].sort(
@@ -444,7 +444,7 @@ export default function SolicitacoesScreen() {
             onPress={() => setActiveTab("meus")}
             hitSlop={10}
           >
-            <Ionicons name="notifications-outline" size={24} color={pendingCount > 0 ? C.primary : C.textSecondary} />
+            <Ionicons name="notifications-outline" size={24} color={pendingCount > 0 ? C.primary : C.text} />
             {pendingCount > 0 && (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>{pendingCount > 9 ? "9+" : pendingCount}</Text>
