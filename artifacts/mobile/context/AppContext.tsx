@@ -77,6 +77,10 @@ export type ProviderProfile = {
 
 export const URGENT_FEE = 10;
 export const PLATFORM_FEE_RATE = 0.1;
+export const MP_PAYMENT_FEE = 0.05; // Mercado Pago processing fee (~5%)
+/** Gross-up a net amount to cover the MP fee; what the client actually pays. */
+export const mpGrossUp = (net: number) =>
+  Math.round((net / (1 - MP_PAYMENT_FEE)) * 100) / 100;
 
 const makeDefaultProvider = (userId: string): ProviderProfile => ({
   id: `provider_${userId}`,

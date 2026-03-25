@@ -20,7 +20,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Colors from "@/constants/colors";
-import { useApp } from "@/context/AppContext";
+import { useApp, mpGrossUp, MP_PAYMENT_FEE } from "@/context/AppContext";
 import type { Service, ServiceStatus } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import LocationPicker from "@/components/LocationPicker";
@@ -184,7 +184,7 @@ function ServiceStatusCard({
           onPress={onPay}
         >
           <Ionicons name="qr-code-outline" size={20} color="#000" />
-          <Text style={styles.actionBtnText}>Pagar via Pix — R$ {service.finalValue.toFixed(2)}</Text>
+          <Text style={styles.actionBtnText}>Pagar via Pix — R$ {mpGrossUp(service.finalValue).toFixed(2)}</Text>
         </Pressable>
       )}
 
@@ -294,26 +294,41 @@ function PixPaymentStep({
       </View>
 
       {/* Order summary */}
-      <View style={styles.orderSummary}>
-        <Text style={styles.orderSummaryTitle}>{service.title}</Text>
-        <View style={styles.orderRow}>
-          <Text style={styles.orderLabel}>Valor base</Text>
-          <Text style={styles.orderValue}>R$ {service.baseValue.toFixed(2)}</Text>
-        </View>
-        {service.urgent && (
-          <View style={styles.orderRow}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Ionicons name="flash" size={13} color={C.danger} />
-              <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa de urgência</Text>
+      {(() => {
+        const gross = mpGrossUp(service.finalValue);
+        const mpFee = gross - service.finalValue;
+        return (
+          <View style={styles.orderSummary}>
+            <Text style={styles.orderSummaryTitle}>{service.title}</Text>
+            <View style={styles.orderRow}>
+              <Text style={styles.orderLabel}>Valor base</Text>
+              <Text style={styles.orderValue}>R$ {service.baseValue.toFixed(2)}</Text>
             </View>
-            <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
+            {service.urgent && (
+              <View style={styles.orderRow}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <Ionicons name="flash" size={13} color={C.danger} />
+                  <Text style={[styles.orderLabel, { color: C.danger }]}>Taxa de urgência</Text>
+                </View>
+                <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
+              </View>
+            )}
+            <View style={styles.orderRow}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <Ionicons name="card-outline" size={13} color={C.textMuted} />
+                <Text style={[styles.orderLabel, { color: C.textMuted }]}>
+                  Taxa de processamento ({(MP_PAYMENT_FEE * 100).toFixed(0)}%)
+                </Text>
+              </View>
+              <Text style={[styles.orderValue, { color: C.textMuted }]}>+R$ {mpFee.toFixed(2)}</Text>
+            </View>
+            <View style={[styles.orderRow, styles.orderTotal]}>
+              <Text style={styles.orderTotalLabel}>Total a pagar</Text>
+              <Text style={styles.orderTotalValue}>R$ {gross.toFixed(2)}</Text>
+            </View>
           </View>
-        )}
-        <View style={[styles.orderRow, styles.orderTotal]}>
-          <Text style={styles.orderTotalLabel}>Total Pix</Text>
-          <Text style={styles.orderTotalValue}>R$ {service.finalValue.toFixed(2)}</Text>
-        </View>
-      </View>
+        );
+      })()}
 
       {pixData === null ? (
         /* ── Step: generate QR ── */
@@ -338,7 +353,7 @@ function PixPaymentStep({
             ) : (
               <>
                 <Ionicons name="qr-code-outline" size={20} color="#000" />
-                <Text style={styles.payBtnText}>Gerar QR Code Pix — R$ {service.finalValue.toFixed(2)}</Text>
+                <Text style={styles.payBtnText}>Gerar QR Code Pix — R$ {mpGrossUp(service.finalValue).toFixed(2)}</Text>
               </>
             )}
           </Pressable>
@@ -630,13 +645,32 @@ function PixModal({
 
       <Text style={styles.modalSub} numberOfLines={1}>{service.title}</Text>
 
-      {/* Order total */}
-      <View style={styles.breakdownBox}>
-        <View style={styles.orderRow}>
-          <Text style={styles.orderLabel}>Total a pagar</Text>
-          <Text style={styles.orderTotalValue}>R$ {service.finalValue.toFixed(2)}</Text>
-        </View>
-      </View>
+      {/* Order total with fee breakdown */}
+      {(() => {
+        const gross = mpGrossUp(service.finalValue);
+        const mpFee = gross - service.finalValue;
+        return (
+          <View style={styles.breakdownBox}>
+            <View style={styles.orderRow}>
+              <Text style={styles.orderLabel}>Serviço</Text>
+              <Text style={styles.orderValue}>R$ {service.finalValue.toFixed(2)}</Text>
+            </View>
+            <View style={styles.orderRow}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Ionicons name="card-outline" size={12} color={C.textMuted} />
+                <Text style={[styles.orderLabel, { color: C.textMuted, fontSize: 11 }]}>
+                  Processamento ({(MP_PAYMENT_FEE * 100).toFixed(0)}%)
+                </Text>
+              </View>
+              <Text style={[styles.orderValue, { color: C.textMuted, fontSize: 11 }]}>+R$ {mpFee.toFixed(2)}</Text>
+            </View>
+            <View style={[styles.orderRow, { borderTopWidth: 1, borderTopColor: C.border, marginTop: 4, paddingTop: 8 }]}>
+              <Text style={styles.orderTotalLabel}>Total a pagar</Text>
+              <Text style={styles.orderTotalValue}>R$ {gross.toFixed(2)}</Text>
+            </View>
+          </View>
+        );
+      })()}
 
       {pixData === null ? (
         <>
@@ -847,7 +881,7 @@ export default function SolicitacoesScreen() {
       setFormStep("payment");
       setGeneratingPix(true);
       try {
-        const amountInCents = Math.round(svc.finalValue * 100);
+        const amountInCents = Math.round(mpGrossUp(svc.finalValue) * 100);
         const res = await fetch(`${API_BASE}/payment/create-payment`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -874,7 +908,7 @@ export default function SolicitacoesScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setGeneratingPix(true);
     try {
-      const amountInCents = Math.round(svc.finalValue * 100);
+      const amountInCents = Math.round(mpGrossUp(svc.finalValue) * 100);
       const res = await fetch(`${API_BASE}/payment/create-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -907,7 +941,7 @@ export default function SolicitacoesScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setPixModal({ serviceId, svc, pixData: null, generating: true });
     try {
-      const amountInCents = Math.round(svc.finalValue * 100);
+      const amountInCents = Math.round(mpGrossUp(svc.finalValue) * 100);
       const res = await fetch(`${API_BASE}/payment/create-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -933,7 +967,7 @@ export default function SolicitacoesScreen() {
     if (!pixModal) return;
     setPixModal((m) => m && { ...m, generating: true });
     try {
-      const amountInCents = Math.round(pixModal.svc.finalValue * 100);
+      const amountInCents = Math.round(mpGrossUp(pixModal.svc.finalValue) * 100);
       const res = await fetch(`${API_BASE}/payment/create-payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
