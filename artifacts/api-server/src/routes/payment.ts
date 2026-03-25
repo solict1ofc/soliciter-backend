@@ -3,17 +3,52 @@ import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import { logger } from "../lib/logger";
+import https from "node:https";
 
 const router = Router();
 
 function getMpClient() {
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-  if (!accessToken) throw new Error("MERCADO_PAGO_ACCESS_TOKEN não configurado");
+  if (!accessToken) return null;
   return new MercadoPagoConfig({ accessToken });
 }
 
+/** Fetch a QR-code image as base64 PNG using the free QR Server API */
+async function fetchQrBase64(data: string): Promise<string> {
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&format=png&data=${encodeURIComponent(data)}`;
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks).toString("base64")));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+/** Build a minimal EMV Pix string for test mode */
+function buildTestPixCode(serviceId: string, amountInReais: number): string {
+  const amt = amountInReais.toFixed(2);
+  const key = "solicite@teste.pix";
+  const name = "SOLICITE TESTE";
+  const city = "Goiania";
+  const txid = serviceId.replace(/[^A-Za-z0-9]/g, "").slice(0, 25).padEnd(5, "0");
+  const payload =
+    `000201` +
+    `010212` +
+    `2641` +
+    `0014br.gov.bcb.pix` +
+    `01${String(key.length).padStart(2, "0")}${key}` +
+    `5204000053039865406${amt.length}${amt}` +
+    `5802BR` +
+    `59${String(name.length).padStart(2, "0")}${name}` +
+    `60${String(city.length).padStart(2, "0")}${city}` +
+    `62${String(txid.length + 4).padStart(2, "0")}05${String(txid.length).padStart(2, "0")}${txid}` +
+    `6304`;
+  return payload + "0000";
+}
+
 // ── POST /api/payment/create-payment ──────────────────────────────────────────
-// Creates a Pix payment via Mercado Pago and returns QR code + copy-paste code
 router.post("/payment/create-payment", async (req, res) => {
   try {
     const { serviceId, amountInCents, title, userEmail } = req.body as {
@@ -30,8 +65,47 @@ router.post("/payment/create-payment", async (req, res) => {
     }
 
     const amountInReais = amountInCents / 100;
-
     const client = getMpClient();
+
+    // ── TEST MODE: no MP token configured ─────────────────────────────────────
+    if (!client) {
+      logger.warn({ serviceId }, "[payment] MERCADO_PAGO_ACCESS_TOKEN não configurado — usando MODO TESTE");
+
+      const pixCode = buildTestPixCode(serviceId, amountInReais);
+      const testPaymentId = `TEST_${serviceId}_${Date.now()}`;
+
+      let qrCode = "";
+      try {
+        qrCode = await fetchQrBase64(pixCode);
+      } catch (e) {
+        logger.warn("[payment] Falha ao gerar QR externo — retornando string vazia");
+      }
+
+      await db
+        .insert(servicePaymentsTable)
+        .values({
+          serviceId,
+          paymentId: testPaymentId,
+          amount: amountInCents,
+          status: "test_pending",
+          pixCode,
+        })
+        .onConflictDoUpdate({
+          target: servicePaymentsTable.serviceId,
+          set: { paymentId: testPaymentId, amount: amountInCents, status: "test_pending", pixCode },
+        });
+
+      logger.info({ serviceId, testPaymentId }, "[payment] Pagamento teste criado");
+
+      return res.json({
+        paymentId: testPaymentId,
+        qrCode,
+        pixCode,
+        isTestMode: true,
+      });
+    }
+
+    // ── PRODUCTION MODE ────────────────────────────────────────────────────────
     const payment = new Payment(client);
 
     const result = await payment.create({
@@ -73,7 +147,7 @@ router.post("/payment/create-payment", async (req, res) => {
       });
 
     logger.info({ serviceId, paymentId, amountInReais }, "Pagamento Pix criado");
-    res.json({ paymentId, qrCode, pixCode });
+    res.json({ paymentId, qrCode, pixCode, isTestMode: false });
   } catch (error: any) {
     logger.error({ err: error }, "[payment/create-payment]");
     res.status(500).json({ error: error.message || "Erro ao criar pagamento Pix" });
@@ -81,7 +155,6 @@ router.post("/payment/create-payment", async (req, res) => {
 });
 
 // ── GET /api/payment/status/:serviceId ────────────────────────────────────────
-// Returns payment status for a given service, also verifies live with MP
 router.get("/payment/status/:serviceId", async (req, res) => {
   try {
     const { serviceId } = req.params;
@@ -100,23 +173,35 @@ router.get("/payment/status/:serviceId", async (req, res) => {
       return res.json({ status: "paid" });
     }
 
+    // Test mode payments: confirm immediately when status is checked
+    if (payment.status === "test_pending") {
+      await db
+        .update(servicePaymentsTable)
+        .set({ status: "paid", paidAt: new Date() })
+        .where(eq(servicePaymentsTable.serviceId, serviceId));
+      logger.info({ serviceId }, "[payment] Pagamento teste confirmado");
+      return res.json({ status: "paid", isTestMode: true });
+    }
+
     // If still pending, verify live with Mercado Pago
     if (payment.status === "pending" && payment.paymentId) {
-      try {
-        const client = getMpClient();
-        const mpPayment = new Payment(client);
-        const paymentInfo = await mpPayment.get({ id: parseInt(payment.paymentId) });
+      const client = getMpClient();
+      if (client) {
+        try {
+          const mpPayment = new Payment(client);
+          const paymentInfo = await mpPayment.get({ id: parseInt(payment.paymentId) });
 
-        if (paymentInfo.status === "approved") {
-          await db
-            .update(servicePaymentsTable)
-            .set({ status: "paid", paidAt: new Date() })
-            .where(eq(servicePaymentsTable.serviceId, serviceId));
-          logger.info({ serviceId, paymentId: payment.paymentId }, "Pagamento confirmado via polling");
-          return res.json({ status: "paid" });
+          if (paymentInfo.status === "approved") {
+            await db
+              .update(servicePaymentsTable)
+              .set({ status: "paid", paidAt: new Date() })
+              .where(eq(servicePaymentsTable.serviceId, serviceId));
+            logger.info({ serviceId, paymentId: payment.paymentId }, "Pagamento confirmado via polling");
+            return res.json({ status: "paid" });
+          }
+        } catch (mpErr: any) {
+          logger.warn({ err: mpErr }, "Erro ao verificar pagamento no MP — retornando status do DB");
         }
-      } catch (mpErr: any) {
-        logger.warn({ err: mpErr }, "Erro ao verificar pagamento no MP — retornando status do DB");
       }
     }
 

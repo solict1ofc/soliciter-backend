@@ -255,7 +255,7 @@ function ServiceStatusCard({
 }
 
 // ─── Pix payment step (inline form step 2) ────────────────────────────────────
-type PixData = { qrCode: string; pixCode: string; paymentId: string };
+type PixData = { qrCode: string; pixCode: string; paymentId: string; isTestMode?: boolean };
 
 function PixPaymentStep({
   service,
@@ -286,6 +286,15 @@ function PixPaymentStep({
 
   return (
     <View style={styles.card}>
+      {/* Test mode banner */}
+      {pixData?.isTestMode && (
+        <View style={{ backgroundColor: "#FFB80020", borderRadius: 10, padding: 10, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#FFB800" }}>
+          <Ionicons name="flask-outline" size={16} color="#FFB800" />
+          <Text style={{ color: "#FFB800", fontSize: 12, fontFamily: "Inter_600SemiBold", flex: 1 }}>
+            MODO TESTE — Token MP não configurado. Pagamento confirmado automaticamente.
+          </Text>
+        </View>
+      )}
       {/* Shield notice */}
       <View style={styles.escrowNotice}>
         <Ionicons name="shield-checkmark" size={22} color={C.primary} />
@@ -361,19 +370,26 @@ function PixPaymentStep({
           </View>
 
           {/* QR Code */}
-          <View style={styles.qrWrapper}>
-            <Image
-              source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
-              style={styles.qrImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.qrHint}>Escaneie no app do seu banco</Text>
-          </View>
+          {pixData.qrCode ? (
+            <View style={styles.qrWrapper}>
+              <Image
+                source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.qrHint}>Escaneie no app do seu banco</Text>
+            </View>
+          ) : (
+            <View style={[styles.qrWrapper, { justifyContent: "center", alignItems: "center", minHeight: 120 }]}>
+              <Ionicons name="qr-code-outline" size={48} color={C.textMuted} />
+              <Text style={[styles.qrHint, { marginTop: 8 }]}>Use o código Pix abaixo</Text>
+            </View>
+          )}
 
           {/* Divider */}
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou copie o código</Text>
+            <Text style={styles.dividerText}>Pix Copia e Cola</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -383,7 +399,7 @@ function PixPaymentStep({
             onPress={handleCopy}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.copyCodeLabel}>Pix Copia e Cola</Text>
+              <Text style={styles.copyCodeLabel}>Código Pix</Text>
               <Text style={styles.copyCodeValue} numberOfLines={1} ellipsizeMode="middle">
                 {pixData.pixCode}
               </Text>
@@ -650,6 +666,16 @@ function PixModal({
 
       <Text style={styles.modalSub} numberOfLines={1}>{service.title}</Text>
 
+      {/* Test mode banner */}
+      {pixData?.isTestMode && (
+        <View style={{ backgroundColor: "#FFB80020", borderRadius: 10, padding: 10, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#FFB800" }}>
+          <Ionicons name="flask-outline" size={15} color="#FFB800" />
+          <Text style={{ color: "#FFB800", fontSize: 11, fontFamily: "Inter_600SemiBold", flex: 1 }}>
+            MODO TESTE — Pagamento confirmado automaticamente.
+          </Text>
+        </View>
+      )}
+
       {/* Order total */}
       <View style={styles.breakdownBox}>
         <View style={styles.orderRow}>
@@ -689,18 +715,25 @@ function PixModal({
             <Text style={styles.pollingText}>Aguardando confirmação...</Text>
           </View>
 
-          <View style={styles.qrWrapper}>
-            <Image
-              source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
-              style={styles.qrImage}
-              resizeMode="contain"
-            />
-            <Text style={styles.qrHint}>Escaneie no app do seu banco</Text>
-          </View>
+          {pixData.qrCode ? (
+            <View style={styles.qrWrapper}>
+              <Image
+                source={{ uri: `data:image/png;base64,${pixData.qrCode}` }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
+              <Text style={styles.qrHint}>Escaneie no app do seu banco</Text>
+            </View>
+          ) : (
+            <View style={[styles.qrWrapper, { justifyContent: "center", alignItems: "center", minHeight: 120 }]}>
+              <Ionicons name="qr-code-outline" size={48} color={C.textMuted} />
+              <Text style={[styles.qrHint, { marginTop: 8 }]}>Use o código Pix abaixo</Text>
+            </View>
+          )}
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou copie o código</Text>
+            <Text style={styles.dividerText}>Pix Copia e Cola</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -709,7 +742,7 @@ function PixModal({
             onPress={handleCopy}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.copyCodeLabel}>Pix Copia e Cola</Text>
+              <Text style={styles.copyCodeLabel}>Código Pix</Text>
               <Text style={styles.copyCodeValue} numberOfLines={1} ellipsizeMode="middle">
                 {pixData.pixCode}
               </Text>
@@ -908,7 +941,7 @@ export default function SolicitacoesScreen() {
         return;
       }
       const data = await res.json();
-      setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId });
+      setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode });
     } catch {
       Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
     } finally {
@@ -970,7 +1003,7 @@ export default function SolicitacoesScreen() {
       setPixModal((m) => m && {
         ...m,
         generating: false,
-        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId },
+        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode },
       });
     } catch {
       Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");

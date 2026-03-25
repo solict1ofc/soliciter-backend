@@ -269,33 +269,23 @@ function useAppContextValue() {
   // ─── 4. Prestador inicia → in_progress ────────────────────────────────────
   const startService = useCallback(
     async (serviceId: string) => {
-      const snapshot = [...services];
       const startedAt = new Date().toISOString();
       const updated = services.map((s) =>
         s.id === serviceId
-          ? {
-              ...s,
-              status: "in_progress" as ServiceStatus,
-              startedAt,
-            }
+          ? { ...s, status: "in_progress" as ServiceStatus, startedAt }
           : s
       );
+      // Update local state first — UI responds immediately
       await saveServices(updated);
 
-      try {
-        const res = await fetch(`${API_BASE}/iniciar-servico`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serviceId }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? `Erro ${res.status}`);
-        }
-      } catch (err: any) {
-        await saveServices(snapshot);
-        Alert.alert("Erro ao iniciar serviço", err.message ?? "Tente novamente.");
-      }
+      // Best-effort API call — failure does NOT revert local state
+      fetch(`${API_BASE}/iniciar-servico`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceId }),
+      }).catch(() => {
+        // Silently ignore network errors — local state is the source of truth
+      });
     },
     [services, saveServices]
   );
@@ -312,7 +302,17 @@ function useAppContextValue() {
             }
           : s
       );
+      // Update local state first — UI responds immediately
       await saveServices(updated);
+
+      // Best-effort API call — failure does NOT revert local state
+      fetch(`${API_BASE}/finalizar-servico`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serviceId }),
+      }).catch(() => {
+        // Silently ignore network errors — local state is the source of truth
+      });
     },
     [services, saveServices]
   );
