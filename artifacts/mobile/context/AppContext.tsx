@@ -443,6 +443,11 @@ function useAppContextValue() {
     [provider, saveProvider]
   );
 
+  /** Zera earnings e withdrawn (uso exclusivo para resetar dados de teste) */
+  const resetProviderBalance = useCallback(async () => {
+    await saveProvider({ ...provider, earnings: 0, withdrawn: 0 });
+  }, [provider, saveProvider]);
+
   const savePhoto = useCallback(
     async (uri: string) => {
       await saveProvider({ ...provider, photoUri: uri });
@@ -475,6 +480,7 @@ function useAppContextValue() {
     activatePlan,
     registerProvider,
     withdrawEarnings,
+    resetProviderBalance,
     savePhoto,
     PLATFORM_FEE_RATE,
     URGENT_FEE,
