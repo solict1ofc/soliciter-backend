@@ -392,7 +392,7 @@ export default function ProfileScreen() {
               ]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                Alert.alert("Em breve", "Saques estarão disponíveis na próxima versão do SOLICITE.");
+                setWithdrawModal(true);
               }}
             >
               <Ionicons name="arrow-up-circle-outline" size={18} color="#000" />
@@ -763,13 +763,42 @@ export default function ProfileScreen() {
                     }
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                     setWithdrawing(true);
-                    const ok = await withdrawEarnings(amt);
-                    setWithdrawing(false);
-                    if (!ok) {
-                      Alert.alert("Erro", "Saldo insuficiente para saque.");
-                      return;
+                    try {
+                      // 1. Registrar saque no backend
+                      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
+                      const res = await fetch(`${apiBase}/sacar`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          userId: user?.id?.toString() ?? provider.id,
+                          amount: amt,
+                          method: withdrawMethod,
+                          pixKey: withdrawMethod === "pix" ? pixKey.trim() : undefined,
+                          bankHolder: withdrawMethod === "bank" ? bankHolder.trim() : undefined,
+                          bankCpf:    withdrawMethod === "bank" ? bankCPF.trim() : undefined,
+                          bankName:   withdrawMethod === "bank" ? bankName.trim() : undefined,
+                          bankAgency: withdrawMethod === "bank" ? bankAgency.trim() : undefined,
+                          bankAccount:withdrawMethod === "bank" ? bankAccount.trim() : undefined,
+                          bankType:   withdrawMethod === "bank" ? bankAccountType : undefined,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        Alert.alert("Erro no saque", data.error ?? "Não foi possível processar o saque. Tente novamente.");
+                        return;
+                      }
+                      // 2. Atualizar saldo local
+                      const ok = await withdrawEarnings(amt);
+                      if (!ok) {
+                        Alert.alert("Erro", "Saldo insuficiente para saque.");
+                        return;
+                      }
+                      setWithdrawSuccess(true);
+                    } catch {
+                      Alert.alert("Erro de conexão", "Verifique sua conexão e tente novamente.");
+                    } finally {
+                      setWithdrawing(false);
                     }
-                    setWithdrawSuccess(true);
                   }}
                 >
                   {withdrawing ? (
