@@ -1,6 +1,25 @@
 import Stripe from "stripe";
+import { logger } from "./lib/logger";
 
-async function getCredentials() {
+// ─── Credential resolution ────────────────────────────────────────────────────
+// Priority:
+//   1. STRIPE_SECRET_KEY env var (works on Render, any non-Replit host)
+//   2. Replit connector service (works inside Replit)
+//
+// For production on Render, set:
+//   STRIPE_SECRET_KEY=sk_live_...
+//   STRIPE_PUBLISHABLE_KEY=pk_live_...
+
+async function getCredentials(): Promise<{ secretKey: string; publishableKey: string }> {
+  // 1. Direct env vars — works on Render, Docker, any host
+  if (process.env.STRIPE_SECRET_KEY) {
+    return {
+      secretKey: process.env.STRIPE_SECRET_KEY,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? "",
+    };
+  }
+
+  // 2. Replit connector service — works only inside Replit
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? "repl " + process.env.REPL_IDENTITY
@@ -8,8 +27,12 @@ async function getCredentials() {
       ? "depl " + process.env.WEB_REPL_RENEWAL
       : null;
 
-  if (!xReplitToken) {
-    throw new Error("X-Replit-Token not found for repl/depl");
+  if (!hostname || !xReplitToken) {
+    throw new Error(
+      "Stripe credentials not configured. " +
+      "Set STRIPE_SECRET_KEY environment variable (for Render/production) " +
+      "or configure the Stripe connector (for Replit)."
+    );
   }
 
   const connectorName = "stripe";
@@ -36,7 +59,7 @@ async function getCredentials() {
     !connectionSettings.settings?.publishable ||
     !connectionSettings.settings?.secret
   ) {
-    throw new Error(`Stripe ${targetEnvironment} connection not found`);
+    throw new Error(`Stripe ${targetEnvironment} connection not found in Replit connector`);
   }
 
   return {
@@ -45,7 +68,7 @@ async function getCredentials() {
   };
 }
 
-export async function getUncachableStripeClient() {
+export async function getUncachableStripeClient(): Promise<Stripe> {
   const { secretKey } = await getCredentials();
   return new Stripe(secretKey, {
     apiVersion: "2025-08-27.basil" as any,

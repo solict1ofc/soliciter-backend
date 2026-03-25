@@ -3,6 +3,7 @@ import cors from "cors";
 import { eq } from "drizzle-orm";
 import express, { type Express } from "express";
 import pinoHttp from "pino-http";
+import rateLimit from "express-rate-limit";
 import { getUncachableStripeClient } from "./stripeClient";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -109,6 +110,26 @@ app.post(
   },
 );
 
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+// Auth endpoints: 10 requests per 15 minutes per IP (brute-force protection)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas tentativas. Aguarde 15 minutos e tente novamente." },
+  skip: () => process.env.NODE_ENV === "development", // skip in dev for easier testing
+});
+
+// General API: 100 requests per minute per IP
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Muitas requisições. Tente novamente em alguns segundos." },
+});
+
 // ── Standard middleware ────────────────────────────────────────────────────────
 app.use(
   pinoHttp({
@@ -126,6 +147,10 @@ app.use(
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Apply rate limiting
+app.use("/api/auth", authLimiter);
+app.use("/api", apiLimiter);
 
 app.use("/api", router);
 
