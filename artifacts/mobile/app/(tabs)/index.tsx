@@ -1024,8 +1024,22 @@ export default function SolicitacoesScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <SoliciteLogo size="sm" />
-          <Text style={styles.headerSub}>Crie e acompanhe seus serviços</Text>
+          <View style={{ flex: 1 }}>
+            <SoliciteLogo size="sm" />
+            <Text style={styles.headerSub}>Crie e acompanhe seus serviços</Text>
+          </View>
+          <Pressable
+            style={styles.bellBtn}
+            onPress={() => setActiveTab("meus")}
+            hitSlop={10}
+          >
+            <Ionicons name="notifications-outline" size={24} color={pendingCount > 0 ? C.primary : C.textSecondary} />
+            {pendingCount > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{pendingCount > 9 ? "9+" : pendingCount}</Text>
+              </View>
+            )}
+          </Pressable>
         </View>
 
         {/* Tab switcher */}
@@ -1126,9 +1140,16 @@ export default function SolicitacoesScreen() {
                         <Text style={[styles.orderValue, { color: C.danger }]}>+R$ 10,00</Text>
                       </View>
                     ) : null}
+                    <View style={styles.orderRow}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                        <Ionicons name="card-outline" size={12} color={C.textMuted} />
+                        <Text style={[styles.orderLabel, { color: C.textMuted, fontSize: 11 }]}>Taxa processamento (5%)</Text>
+                      </View>
+                      <Text style={[styles.orderValue, { color: C.textMuted, fontSize: 11 }]}>+R$ {(mpGrossUp(finalValue) - finalValue).toFixed(2)}</Text>
+                    </View>
                     <View style={[styles.orderRow, styles.orderTotal]}>
-                      <Text style={styles.orderTotalLabel}>Total</Text>
-                      <Text style={styles.orderTotalValue}>R$ {finalValue.toFixed(2)}</Text>
+                      <Text style={styles.orderTotalLabel}>Total a pagar</Text>
+                      <Text style={styles.orderTotalValue}>R$ {mpGrossUp(finalValue).toFixed(2)}</Text>
                     </View>
                   </View>
                 )}
@@ -1254,8 +1275,33 @@ export default function SolicitacoesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
 
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, flexDirection: "row", alignItems: "center" },
   headerSub: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  bellBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.surface,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bellBadge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: C.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: C.background,
+  },
+  bellBadgeText: { fontSize: 10, fontFamily: "Inter_700Bold", color: "#fff" },
 
   tabSwitcher: {
     flexDirection: "row", marginHorizontal: 16, marginBottom: 12,

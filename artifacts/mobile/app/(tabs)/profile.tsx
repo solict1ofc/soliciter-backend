@@ -1250,7 +1250,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
     gap: 16,
-    overflow: "hidden",
   },
   // Promotion banner
   promoBanner: {
