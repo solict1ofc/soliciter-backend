@@ -10,6 +10,10 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Trust the first proxy (required on Replit, Render, and most cloud platforms)
+// This allows express-rate-limit to correctly identify client IPs via X-Forwarded-For
+app.set("trust proxy", 1);
+
 // ── Stripe webhook — must be BEFORE express.json() ────────────────────────────
 // Raw body needed for signature verification
 app.post(

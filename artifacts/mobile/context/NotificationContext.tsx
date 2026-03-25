@@ -236,27 +236,25 @@ function NotifToast({
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.toast,
-        { backgroundColor: cfg.bg, borderColor: cfg.border, transform: [{ translateY }], opacity },
-        notif.urgent && styles.toastUrgent,
-        route && styles.toastTappable,
-      ]}
+    <Pressable
+      onPress={route ? handlePress : undefined}
+      style={{ borderRadius: 16 }}
     >
-      {notif.urgent && (
-        <Animated.View
-          style={[StyleSheet.absoluteFill, styles.urgentGlowBorder, { opacity: urgentBorderOpacity }]}
-          pointerEvents="none"
-        />
-      )}
-
-      {/* Tappable area: everything except the dismiss button */}
-      <Pressable
-        style={styles.toastContent}
-        onPress={handlePress}
-        android_ripple={route ? { color: "rgba(255,255,255,0.08)" } : undefined}
+      <Animated.View
+        style={[
+          styles.toast,
+          { backgroundColor: cfg.bg, borderColor: cfg.border, transform: [{ translateY }], opacity },
+          notif.urgent && styles.toastUrgent,
+          route && styles.toastTappable,
+        ]}
       >
+        {notif.urgent && (
+          <Animated.View
+            style={[StyleSheet.absoluteFill, styles.urgentGlowBorder, { opacity: urgentBorderOpacity }]}
+            pointerEvents="none"
+          />
+        )}
+
         <View style={[styles.iconWrap, notif.urgent && styles.iconWrapUrgent]}>
           <Ionicons name={cfg.icon} size={notif.urgent ? 26 : 22} color={cfg.color} />
         </View>
@@ -274,12 +272,13 @@ function NotifToast({
             </Text>
           )}
         </View>
-      </Pressable>
 
-      <Pressable onPress={onDismiss} hitSlop={12} style={styles.closeBtn}>
-        <Ionicons name="close" size={16} color={cfg.color} />
-      </Pressable>
-    </Animated.View>
+        {/* Dismiss: inner Pressable captures touch so outer nav Pressable is NOT triggered */}
+        <Pressable onPress={onDismiss} hitSlop={12} style={styles.closeBtn}>
+          <Ionicons name="close" size={16} color={cfg.color} />
+        </Pressable>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -369,7 +368,9 @@ const styles = StyleSheet.create({
   toast: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
     borderRadius: 16,
+    padding: 16,
     borderWidth: 1.5,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
@@ -379,18 +380,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   toastTappable: {
-    // Subtle ring to indicate tappability
     shadowColor: "#00D4FF",
     shadowOpacity: 0.25,
   },
-  toastContent: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-  },
   toastUrgent: {
+    padding: 18,
     borderRadius: 18,
     borderWidth: 2,
   },
@@ -432,7 +426,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   closeBtn: {
-    paddingRight: 14,
-    paddingVertical: 14,
+    marginLeft: "auto" as any,
+    padding: 4,
   },
 });
