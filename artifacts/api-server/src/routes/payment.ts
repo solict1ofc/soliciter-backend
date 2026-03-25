@@ -7,9 +7,25 @@ import https from "node:https";
 
 const router = Router();
 
+/**
+ * Retorna o cliente do Mercado Pago somente quando o token tem formato válido.
+ * Tokens válidos começam com "TEST-" (sandbox) ou "APP_USR-" (produção).
+ * Tokens em formato inválido são ignorados → o sistema cai em modo teste.
+ */
 function getMpClient() {
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
   if (!accessToken) return null;
+
+  const isValidFormat = accessToken.startsWith("TEST-") || accessToken.startsWith("APP_USR-");
+  if (!isValidFormat) {
+    logger.warn(
+      "[payment] MERCADO_PAGO_ACCESS_TOKEN com formato inválido. " +
+      "Token deve começar com 'TEST-' (sandbox) ou 'APP_USR-' (produção). " +
+      "Ativando MODO TESTE automático."
+    );
+    return null;
+  }
+
   return new MercadoPagoConfig({ accessToken });
 }
 

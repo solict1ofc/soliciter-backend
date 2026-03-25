@@ -27,9 +27,19 @@ const router = Router();
 const MP_API        = "https://api.mercadopago.com";
 const TAXA_5PCT     = 0.05;
 
-/** Retorna o Access Token do Mercado Pago (lido a cada requisição para capturar mudanças de env) */
+/**
+ * Retorna o Access Token do Mercado Pago somente se tiver formato válido.
+ * Tokens válidos: "TEST-..." (sandbox) ou "APP_USR-..." (produção).
+ * Tokens inválidos → retorna null → modo teste ativado automaticamente.
+ */
 function getToken(): string | null {
-  return process.env.MERCADO_PAGO_ACCESS_TOKEN ?? null;
+  const token = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+  if (!token) return null;
+  if (token.startsWith("TEST-") || token.startsWith("APP_USR-")) return token;
+  logger.warn(
+    "[pix] Token inválido (não começa com TEST- ou APP_USR-). Ativando MODO TESTE."
+  );
+  return null;
 }
 
 /** Cabeçalhos padrão para chamadas autenticadas ao Mercado Pago */
