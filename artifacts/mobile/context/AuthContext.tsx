@@ -76,6 +76,23 @@ function useAuthContextValue() {
     setUser(data.user);
   }, []);
 
+  // ── Refresh user data from API (e.g. after premium activation) ───────────
+  const refreshUser = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(TOKEN_KEY);
+      if (!stored) return;
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${stored}` },
+      });
+      if (res.ok) {
+        const { user: u } = await res.json();
+        setUser(u);
+      }
+    } catch {
+      // silent — network issues shouldn't break the session
+    }
+  }, []);
+
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     await AsyncStorage.removeItem(TOKEN_KEY);
@@ -83,7 +100,7 @@ function useAuthContextValue() {
     setUser(null);
   }, []);
 
-  return { user, token, loading, login, register, logout };
+  return { user, token, loading, login, register, logout, refreshUser };
 }
 
 export const [AuthContextProvider, useAuth] = createContextHook(useAuthContextValue);

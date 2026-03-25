@@ -126,17 +126,25 @@ End-to-end Stripe Checkout payment flow for the SOLICITE app:
 
 Stripe Checkout subscription flow for provider plans:
 
-- **Backend** (`artifacts/api-server/src/routes/service.ts`):
-  - `POST /api/criar-assinatura` — receives `{ plan }` (basic/destaque/premium), creates Stripe Checkout Session with `mode: "subscription"` and `recurring: { interval: "month" }`, returns `{ url }`
-  - `GET /api/assinatura/sucesso` — success redirect page after Stripe payment
-  - `GET /api/assinatura/cancelado` — cancel redirect page
-  - Plan prices: basic R$80, destaque R$99, premium R$120 (in cents: 8000, 9900, 12000)
+- **Backend** (`artifacts/api-server/src/routes/subscription.ts`):
+  - `POST /api/criar-assinatura` — receives `{ plan, userId }`, creates Stripe Checkout Session with `mode: "subscription"` and `recurring: { interval: "month" }`, returns `{ url }`. `userId` is embedded in `success_url` so the DB can be updated on Stripe redirect.
+  - `GET /api/subscription/success` — success redirect page; updates `users.isPremium=true` and `premiumExpiresAt=+1 month` in DB using `user_id` from query string; validates Stripe session status before writing
+  - `GET /api/subscription/cancel` — cancel redirect page
+  - Plan prices: basic R$59 (5900), destaque R$79 (7900), premium R$99 (9900) in cents
 - **Mobile flow** (`artifacts/mobile/app/(tabs)/profile.tsx`):
   1. Provider selects a plan → confirmation alert
   2. `subscribePlan(plan)` calls `POST /api/criar-assinatura` → gets checkout URL
-  3. Opens Stripe Checkout in browser via `expo-web-browser`
-  4. On success, local provider state updated with plan + 1-month expiry
-  5. On API error, Alert shown and local state unchanged
+  3. Opens Stripe Checkout in browser via `expo-web-browser` (native) or `window.location.href` (web)
+  4. After browser closes (native): `refreshUser()` syncs `isPremium` from DB, then `activatePlan()` updates local provider display state
+  5. Profile tab also calls `refreshUser()` on every focus (via `useFocusEffect`) to keep `isPremium` in sync
+
+### Production URL Resolution (`getApiBase`)
+
+Both `payment.ts` and `subscription.ts` use `getApiBase(req)` which resolves the server's public URL in priority order:
+1. `APP_URL` env var (manual override for any platform)
+2. `REPLIT_DOMAINS` (Replit development/hosting)
+3. `RENDER_EXTERNAL_URL` (auto-set by Render)
+4. Derived from `x-forwarded-proto` + `x-forwarded-host` request headers (works behind any proxy)
 
 ### Service Status Tracking
 

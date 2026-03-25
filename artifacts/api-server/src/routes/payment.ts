@@ -6,9 +6,17 @@ import { getStripePublishableKey, getUncachableStripeClient } from "../stripeCli
 const router = Router();
 
 function getApiBase(req: any): string {
-  const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (domain) return `https://${domain}`;
-  return `http://localhost:${process.env.PORT}`;
+  // 1. Explicit override (works on any platform)
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  // 2. Replit
+  const replitDomain = process.env.REPLIT_DOMAINS?.split(",")[0];
+  if (replitDomain) return `https://${replitDomain}`;
+  // 3. Render
+  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "");
+  // 4. Derive from request (works behind any proxy)
+  const proto = req.headers["x-forwarded-proto"] ?? req.protocol ?? "http";
+  const host = req.headers["x-forwarded-host"] ?? req.headers.host ?? `localhost:${process.env.PORT}`;
+  return `${proto}://${host}`;
 }
 
 // ── POST /api/payment/create-checkout ─────────────────────────────────────────

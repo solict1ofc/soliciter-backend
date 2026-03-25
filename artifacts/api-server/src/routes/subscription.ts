@@ -6,9 +6,13 @@ import { getUncachableStripeClient } from "../stripeClient";
 const router = Router();
 
 function getApiBase(req: any): string {
-  const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (domain) return `https://${domain}`;
-  return `http://localhost:${process.env.PORT}`;
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  const replitDomain = process.env.REPLIT_DOMAINS?.split(",")[0];
+  if (replitDomain) return `https://${replitDomain}`;
+  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/$/, "");
+  const proto = req.headers["x-forwarded-proto"] ?? req.protocol ?? "http";
+  const host = req.headers["x-forwarded-host"] ?? req.headers.host ?? `localhost:${process.env.PORT}`;
+  return `${proto}://${host}`;
 }
 
 const PLAN_CONFIG: Record<string, { name: string; amountInCents: number }> = {

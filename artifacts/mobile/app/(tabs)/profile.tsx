@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -119,7 +120,14 @@ type WithdrawMethod = "pix" | "bank";
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { provider, subscribePlan, activatePlan, pendingEarnings, withdrawEarnings } = useApp();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+
+  // Refresh isPremium every time this tab is focused (e.g. after returning from Stripe web)
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser();
+    }, [refreshUser])
+  );
 
   const handleLogout = () => {
     Alert.alert("Sair da conta", "Tem certeza que deseja sair?", [
@@ -176,12 +184,14 @@ export default function ProfileScreen() {
       if (!url) return;
 
       if (Platform.OS === "web") {
-        // Web: ativa o plano otimisticamente e redireciona na mesma aba
-        await activatePlan(plan.key);
+        // Web: redireciona para o Stripe — volta via success_url
         window.location.href = url;
       } else {
-        // Native: abre o browser externo e ativa o plano ao retornar
+        // Native: abre browser in-app, aguarda fechar, depois sincroniza status do DB
         await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
+        // Sync isPremium from DB (Stripe success_url already updated it)
+        await refreshUser();
+        // Also update local provider plan for display purposes
         await activatePlan(plan.key);
       }
     } catch (err: any) {
