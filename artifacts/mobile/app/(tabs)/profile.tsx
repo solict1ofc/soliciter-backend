@@ -177,7 +177,7 @@ export default function ProfileScreen() {
   const [subscribing, setSubscribing] = useState(false);
 
   // Plan payment state
-  type PlanPixData = { qrCode: string; pixCode: string; paymentId: string; planKey: ProviderPlan; isTestMode?: boolean };
+  type PlanPixData = { qrCode: string; pixCode: string; paymentId: string; planKey: ProviderPlan };
   const [planPixModal, setPlanPixModal] = useState<PlanPixData | null>(null);
   const [planPixCopied, setPlanPixCopied] = useState(false);
   const [planCheckingPayment, setPlanCheckingPayment] = useState(false);
@@ -268,7 +268,6 @@ export default function ProfileScreen() {
         pixCode: data.pixCode,
         paymentId: planPaymentId,
         planKey: plan.key,
-        isTestMode: !!data.isTestMode,
       });
       setSelectedPlan(null);
     } catch {
@@ -975,16 +974,6 @@ export default function ProfileScreen() {
                   </Pressable>
                 )}
               </View>
-
-              {/* Test mode banner */}
-              {planPixModal.isTestMode && (
-                <View style={{ backgroundColor: "#FFB80020", borderRadius: 10, padding: 10, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#FFB800" }}>
-                  <Ionicons name="flask-outline" size={15} color="#FFB800" />
-                  <Text style={{ color: "#FFB800", fontSize: 11, fontFamily: "Inter_600SemiBold", flex: 1 }}>
-                    MODO TESTE — Pagamento confirmado automaticamente em instantes.
-                  </Text>
-                </View>
-              )}
 
               {/* Polling badge */}
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primaryGlow, borderRadius: 10, padding: 10, marginBottom: 10 }}>

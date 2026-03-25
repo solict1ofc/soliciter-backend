@@ -125,7 +125,7 @@ function useAppContextValue() {
       setServices(loaded);
       if (providerJson) {
         const saved = JSON.parse(providerJson) as ProviderProfile;
-        setProvider({ withdrawn: 0, ...saved });
+        setProvider({ ...saved, withdrawn: saved.withdrawn ?? 0 });
       } else {
         setProvider(makeDefaultProvider(userId));
       }

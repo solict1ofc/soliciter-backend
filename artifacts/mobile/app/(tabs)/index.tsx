@@ -255,22 +255,18 @@ function ServiceStatusCard({
 }
 
 // ─── Pix payment step (inline form step 2) ────────────────────────────────────
-type PixData = { qrCode: string; pixCode: string; paymentId: string; isTestMode?: boolean };
+type PixData = { qrCode: string; pixCode: string; paymentId: string };
 
 function PixPaymentStep({
   service,
   pixData,
   creating,
   onGenerate,
-  onAlreadyPaid,
-  checkingPayment,
 }: {
   service: Service | undefined;
   pixData: PixData | null;
   creating: boolean;
   onGenerate: () => void;
-  onAlreadyPaid: () => void;
-  checkingPayment: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -286,15 +282,6 @@ function PixPaymentStep({
 
   return (
     <View style={styles.card}>
-      {/* Test mode banner */}
-      {pixData?.isTestMode && (
-        <View style={{ backgroundColor: "#FFB80020", borderRadius: 10, padding: 10, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#FFB800" }}>
-          <Ionicons name="flask-outline" size={16} color="#FFB800" />
-          <Text style={{ color: "#FFB800", fontSize: 12, fontFamily: "Inter_600SemiBold", flex: 1 }}>
-            MODO TESTE — Token MP não configurado. Pagamento confirmado automaticamente.
-          </Text>
-        </View>
-      )}
       {/* Shield notice */}
       <View style={styles.escrowNotice}>
         <Ionicons name="shield-checkmark" size={22} color={C.primary} />
@@ -609,17 +596,13 @@ function PixModal({
   service,
   pixData,
   creating,
-  checkingPayment,
   onGenerate,
-  onAlreadyPaid,
   onClose,
 }: {
   service: Service | null;
   pixData: PixData | null;
   creating: boolean;
-  checkingPayment: boolean;
   onGenerate: () => void;
-  onAlreadyPaid: () => void;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -638,7 +621,7 @@ function PixModal({
     <View style={styles.modalContent}>
       <View style={styles.modalHeader}>
         <Text style={styles.modalTitle}>Pagar via Pix</Text>
-        {!creating && !checkingPayment && (
+        {!creating && (
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={12}>
             <Ionicons name="close-outline" size={20} color={C.textSecondary} />
           </Pressable>
@@ -646,16 +629,6 @@ function PixModal({
       </View>
 
       <Text style={styles.modalSub} numberOfLines={1}>{service.title}</Text>
-
-      {/* Test mode banner */}
-      {pixData?.isTestMode && (
-        <View style={{ backgroundColor: "#FFB80020", borderRadius: 10, padding: 10, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#FFB800" }}>
-          <Ionicons name="flask-outline" size={15} color="#FFB800" />
-          <Text style={{ color: "#FFB800", fontSize: 11, fontFamily: "Inter_600SemiBold", flex: 1 }}>
-            MODO TESTE — Pagamento confirmado automaticamente.
-          </Text>
-        </View>
-      )}
 
       {/* Order total */}
       <View style={styles.breakdownBox}>
@@ -770,7 +743,6 @@ export default function SolicitacoesScreen() {
   // Pix state (form flow)
   const [pixData, setPixData]             = useState<PixData | null>(null);
   const [generatingPix, setGeneratingPix] = useState(false);
-  const [checkingForm, setCheckingForm]   = useState(false);
 
   // Pix modal (card flow — existing pending_payment services)
   const [pixModal, setPixModal] = useState<{
@@ -778,7 +750,6 @@ export default function SolicitacoesScreen() {
     svc: Service;
     pixData: PixData | null;
     generating: boolean;
-    checking: boolean;
   } | null>(null);
 
   // Rating modal
@@ -884,7 +855,7 @@ export default function SolicitacoesScreen() {
         });
         if (res.ok) {
           const data = await res.json();
-          setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode });
+          setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId });
         }
       } catch {
       } finally {
@@ -920,7 +891,7 @@ export default function SolicitacoesScreen() {
         return;
       }
       const data = await res.json();
-      setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode });
+      setPixData({ qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId });
     } catch {
       Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
     } finally {
@@ -928,32 +899,13 @@ export default function SolicitacoesScreen() {
     }
   };
 
-  // ─── Manual "Já paguei" check (form flow) ─────────────────────────────────
-  const handleAlreadyPaidForm = async () => {
-    if (!pendingId) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCheckingForm(true);
-    try {
-      const paid = await checkPaymentStatus(pendingId);
-      if (paid) {
-        if (formPollRef.current) { clearInterval(formPollRef.current); formPollRef.current = null; }
-        await confirmPayment(pendingId);
-        setFormStep("success");
-        setPixData(null);
-      } else {
-        Alert.alert("Não confirmado", "O pagamento ainda não foi identificado. Aguarde alguns segundos e tente novamente.");
-      }
-    } finally {
-      setCheckingForm(false);
-    }
-  };
 
   // ─── Open Pix modal for card (existing pending_payment service) ───────────
   const handlePayFromCard = async (serviceId: string) => {
     const svc = services.find((s) => s.id === serviceId);
     if (!svc) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setPixModal({ serviceId, svc, pixData: null, generating: true, checking: false });
+    setPixModal({ serviceId, svc, pixData: null, generating: true });
     try {
       const amountInCents = Math.round(svc.finalValue * 100);
       const res = await fetch(`${API_BASE}/payment/create-payment`, {
@@ -969,7 +921,7 @@ export default function SolicitacoesScreen() {
       setPixModal((m) => m && {
         ...m,
         generating: false,
-        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode },
+        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId },
       });
     } catch {
       setPixModal((m) => m && { ...m, generating: false });
@@ -1002,33 +954,11 @@ export default function SolicitacoesScreen() {
       setPixModal((m) => m && {
         ...m,
         generating: false,
-        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId, isTestMode: !!data.isTestMode },
+        pixData: { qrCode: data.qrCode, pixCode: data.pixCode, paymentId: data.paymentId },
       });
     } catch {
       Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
       setPixModal((m) => m && { ...m, generating: false });
-    }
-  };
-
-  // ─── Manual "Já paguei" check (modal flow) ────────────────────────────────
-  const handleModalAlreadyPaid = async () => {
-    if (!pixModal) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPixModal((m) => m && { ...m, checking: true });
-    try {
-      const paid = await checkPaymentStatus(pixModal.serviceId);
-      if (paid) {
-        if (modalPollRef.current) { clearInterval(modalPollRef.current); modalPollRef.current = null; }
-        await confirmPayment(pixModal.serviceId);
-        setPixModal(null);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert("Pagamento confirmado! ✓", "Sua solicitação está disponível no marketplace.");
-      } else {
-        setPixModal((m) => m && { ...m, checking: false });
-        Alert.alert("Não confirmado", "O pagamento ainda não foi identificado. Aguarde alguns segundos e tente novamente.");
-      }
-    } catch {
-      setPixModal((m) => m && { ...m, checking: false });
     }
   };
 
@@ -1192,8 +1122,6 @@ export default function SolicitacoesScreen() {
                 pixData={pixData}
                 creating={generatingPix}
                 onGenerate={handleGeneratePix}
-                onAlreadyPaid={handleAlreadyPaidForm}
-                checkingPayment={checkingForm}
               />
             )}
 
@@ -1269,7 +1197,7 @@ export default function SolicitacoesScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (!pixModal?.generating && !pixModal?.checking) setPixModal(null);
+          if (!pixModal?.generating) setPixModal(null);
         }}
       >
         <View style={styles.modalOverlay}>
@@ -1278,9 +1206,7 @@ export default function SolicitacoesScreen() {
               service={pixModal.svc}
               pixData={pixModal.pixData}
               creating={pixModal.generating}
-              checkingPayment={pixModal.checking}
               onGenerate={handleModalGeneratePix}
-              onAlreadyPaid={handleModalAlreadyPaid}
               onClose={() => setPixModal(null)}
             />
           )}
@@ -1450,14 +1376,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.primaryGlow, alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: C.primary + "40",
   },
-
-  // "Já Paguei" button
-  paidBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    borderRadius: 14, paddingVertical: 16,
-    backgroundColor: C.primaryGlow, borderWidth: 1, borderColor: C.primary,
-  },
-  paidBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: C.primary },
 
   payBtn: {
     backgroundColor: C.primary, borderRadius: 14, paddingVertical: 18,
