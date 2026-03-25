@@ -116,7 +116,13 @@ app.use("/api", router);
 //   ../../admin/dist/public  → artifacts/admin/dist/public
 //   ../../mobile/static-build → artifacts/mobile/static-build
 
-const adminDist = path.resolve(__dirname, "../../admin/dist/public");
+// ADMIN_DIST_PATH env var → set by Render (server/ bundle puts admin-public in dist/)
+// Fallback 1: dist/admin-public/ sibling of this bundle (server/dist/)
+// Fallback 2: ../../admin/dist/public relative to this file (Replit dev build)
+const _adminBundled = path.resolve(__dirname, "admin-public");
+const _adminDev     = path.resolve(__dirname, "../../admin/dist/public");
+const adminDist     = process.env.ADMIN_DIST_PATH
+  ?? (existsSync(_adminBundled) ? _adminBundled : _adminDev);
 const mobileDist = path.resolve(__dirname, "../../mobile/static-build");
 const mobileLandingTmpl = path.resolve(
   __dirname,

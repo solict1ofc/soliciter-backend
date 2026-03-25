@@ -146,14 +146,24 @@ Single Render web service — one Express server serves everything:
 | `GET /` (without header) | Mobile landing page (QR code) |
 | `/_expo/*`, `/ios/*`, `/android/*` | Expo static bundles + assets |
 
-### Build pipeline (`scripts/render-build.mjs`)
-1. `pnpm --filter @workspace/api-server run build` → `artifacts/api-server/dist/index.mjs`
-2. `BASE_PATH=/admin/ pnpm --filter @workspace/admin run build` → `artifacts/admin/dist/public`
-3. `EXPO_PUBLIC_DOMAIN=$RENDER_EXTERNAL_HOSTNAME pnpm --filter @workspace/mobile run build` → `artifacts/mobile/static-build/`
+### Build pipeline — `server/` standalone npm package
+The `server/` directory is a self-contained npm project (no pnpm, no workspace:*).
+Render uses it directly:
+- **buildCommand**: `npm install && node build.mjs`
+- **startCommand**: `npm start`  (→ `node --enable-source-maps dist/index.mjs`)
+- **rootDir**: `server`
 
-### Root scripts
-- `pnpm run render:build` — runs all three builds in sequence
-- `pnpm run render:start` — starts the Express server (`artifacts/api-server/dist/index.mjs`)
+`server/build.mjs` does:
+1. esbuild bundles `artifacts/api-server/src/index.ts` → `dist/index.mjs`
+   Workspace libs (`@workspace/db`, `@workspace/api-zod`) are inlined via path aliases — no pnpm needed.
+2. Copies pre-built admin panel `artifacts/admin/dist/public/` → `dist/admin-public/`
+
+**Admin dist is committed to git** (`.gitignore` has `!artifacts/admin/dist/**` exception).
+To update admin after changes: `pnpm --filter @workspace/admin run build` then commit.
+
+### Root scripts (Replit dev only)
+- `pnpm run render:build` — legacy (kept for reference)
+- `pnpm run render:start` — legacy
 
 ### Required environment variables on Render
 | Variable | Notes |
