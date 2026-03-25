@@ -300,6 +300,198 @@ function CityHeader({ title, count, isUserCity }: { title: string; count: number
   );
 }
 
+// ─── Urgent call modal (Uber-style) ───────────────────────────────────────────
+function UrgentCallModal({
+  service,
+  visible,
+  onAccept,
+  onDismiss,
+}: {
+  service: Service | null;
+  visible: boolean;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const [countdown, setCountdown] = useState(15);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const slideAnim = useRef(new Animated.Value(700)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const glowLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    if (visible && service) {
+      slideAnim.setValue(700);
+      Animated.spring(slideAnim, {
+        toValue: 0, tension: 80, friction: 10, useNativeDriver: true,
+      }).start();
+
+      glowAnim.setValue(0);
+      glowLoopRef.current = Animated.loop(Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 0.18, duration: 850, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.04, duration: 850, useNativeDriver: true }),
+      ]));
+      glowLoopRef.current.start();
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      const t1 = setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 500);
+      const t2 = setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 1000);
+
+      setCountdown(15);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      countdownRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownRef.current!);
+            countdownRef.current = null;
+            onDismiss();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        glowLoopRef.current?.stop();
+        clearTimeout(t1);
+        clearTimeout(t2);
+        if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+      };
+    }
+  }, [visible, service?.id]);
+
+  const stop = () => {
+    glowLoopRef.current?.stop();
+    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
+  };
+
+  const handleAccept = () => { stop(); onAccept(); };
+  const handleDismiss = () => { stop(); onDismiss(); };
+
+  if (!service) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.88)", justifyContent: "flex-end" }}>
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: "#FF3B5C", opacity: glowAnim }]}
+        />
+        <Animated.View style={[uStyles.sheet, { transform: [{ translateY: slideAnim }] }]}>
+          {/* Header row */}
+          <View style={uStyles.topBar}>
+            <View style={uStyles.priorityBadge}>
+              <Ionicons name="flash" size={13} color="#000" />
+              <Text style={uStyles.priorityBadgeText}>CHAMADA PRIORITÁRIA</Text>
+            </View>
+            <View style={[uStyles.countdownCircle, countdown <= 5 && uStyles.countdownDanger]}>
+              <Text style={[uStyles.countdownText, countdown <= 5 && { color: "#FF3B5C" }]}>
+                {countdown}s
+              </Text>
+            </View>
+          </View>
+
+          {/* Icon */}
+          <View style={uStyles.flashWrap}>
+            <Ionicons name="flash" size={40} color="#FF3B5C" />
+          </View>
+
+          {/* Service info */}
+          <Text style={uStyles.title} numberOfLines={2}>{service.title}</Text>
+          <Text style={uStyles.desc} numberOfLines={2}>{service.description}</Text>
+
+          {/* Location + value */}
+          <View style={uStyles.infoRow}>
+            <View style={uStyles.locationBox}>
+              <Ionicons name="location" size={16} color={C.primary} />
+              <View>
+                <Text style={uStyles.locationCity}>{service.city}</Text>
+                <Text style={uStyles.locationNbh}>{service.neighborhood}</Text>
+              </View>
+            </View>
+            <View style={uStyles.valueBox}>
+              <Text style={uStyles.valueLabel}>Você recebe</Text>
+              <Text style={uStyles.valueAmount}>R$ {service.finalValue.toFixed(2)}</Text>
+              <Text style={uStyles.urgentBonus}>+R$10 urgência incluída</Text>
+            </View>
+          </View>
+
+          {/* Accept */}
+          <Pressable
+            style={({ pressed }) => [uStyles.acceptBtn, pressed && { opacity: 0.88 }]}
+            onPress={handleAccept}
+          >
+            <Ionicons name="flash" size={22} color="#000" />
+            <Text style={uStyles.acceptBtnText}>ACEITAR AGORA</Text>
+            <Ionicons name="arrow-forward-circle" size={22} color="rgba(0,0,0,0.35)" />
+          </Pressable>
+
+          {/* Dismiss */}
+          <Pressable style={uStyles.dismissBtn} onPress={handleDismiss}>
+            <Text style={uStyles.dismissText}>Ignorar solicitação</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+const uStyles = StyleSheet.create({
+  sheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 44,
+    borderTopWidth: 2,
+    borderColor: "#FF3B5C",
+    gap: 14,
+  },
+  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  priorityBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "#FF3B5C", borderRadius: 20,
+    paddingHorizontal: 14, paddingVertical: 7,
+  },
+  priorityBadgeText: { fontSize: 11, fontFamily: "Inter_700Bold", color: "#000", letterSpacing: 0.8 },
+  countdownCircle: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: C.primaryGlow, borderWidth: 2, borderColor: C.primary,
+    alignItems: "center", justifyContent: "center",
+  },
+  countdownDanger: { backgroundColor: "#FF3B5C20", borderColor: "#FF3B5C" },
+  countdownText: { fontSize: 15, fontFamily: "Inter_700Bold", color: C.primary },
+  flashWrap: {
+    alignSelf: "center",
+    width: 76, height: 76, borderRadius: 38,
+    backgroundColor: "#FF3B5C18",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "#FF3B5C35",
+  },
+  title: { fontSize: 21, fontFamily: "Inter_700Bold", color: C.text, textAlign: "center" },
+  desc: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary, textAlign: "center", lineHeight: 20 },
+  infoRow: {
+    flexDirection: "row", gap: 12,
+    backgroundColor: C.backgroundTertiary, borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: C.border, alignItems: "center",
+  },
+  locationBox: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  locationCity: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.text },
+  locationNbh: { fontSize: 12, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  valueBox: { alignItems: "flex-end" },
+  valueLabel: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  valueAmount: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.success },
+  urgentBonus: { fontSize: 10, fontFamily: "Inter_400Regular", color: "#FF3B5C" },
+  acceptBtn: {
+    backgroundColor: C.primary, borderRadius: 18, paddingVertical: 20,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 24, marginTop: 4,
+  },
+  acceptBtnText: { fontSize: 18, fontFamily: "Inter_700Bold", color: "#000", letterSpacing: 0.5 },
+  dismissBtn: { alignItems: "center", paddingVertical: 6 },
+  dismissText: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textMuted },
+});
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 type Section = { title: string; data: Service[]; isUserCity: boolean };
 type QuickFilter = "nearby" | "all";
@@ -307,6 +499,7 @@ type QuickFilter = "nearby" | "all";
 export default function GlobalScreen() {
   const insets = useSafeAreaInsets();
   const { availableServices, acceptService, provider } = useApp();
+  const isPaidPlan = provider.plan !== "free";
   const [refreshing, setRefreshing] = useState(false);
   const [filterVisible, setFilterVisible] = useState(false);
   const [filterCity, setFilterCity] = useState("");
@@ -314,8 +507,18 @@ export default function GlobalScreen() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("nearby");
   const [newServiceIds, setNewServiceIds] = useState<Set<string>>(new Set());
   const [urgentCount, setUrgentCount] = useState(0);
+  const [urgentModalService, setUrgentModalService] = useState<Service | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
+  const seenUrgentModalRef = useRef<Set<string>>(new Set());
   const liveDotAnim = useRef(new Animated.Value(1)).current;
+
+  // Total urgent services (including those blocked for free plan)
+  const totalUrgent = useMemo(
+    () => availableServices.filter((s) => s.urgent).length,
+    [availableServices]
+  );
+  // Blocked urgent count shown as teaser for free plan providers
+  const blockedUrgentCount = isPaidPlan ? 0 : totalUrgent;
 
   // ── Animate live dot ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -329,7 +532,7 @@ export default function GlobalScreen() {
     return () => loop.stop();
   }, []);
 
-  // ── Detect new services (including urgent) ────────────────────────────────
+  // ── Detect new services + trigger urgent modal for paid providers ──────────
   useEffect(() => {
     const currentIds = new Set(availableServices.map((s) => s.id));
     const arrived: string[] = [];
@@ -343,6 +546,16 @@ export default function GlobalScreen() {
         arrived.forEach((id) => next.add(id));
         return next;
       });
+      // Show urgent modal for the first new urgent service (paid plan only)
+      if (isPaidPlan && !urgentModalService) {
+        const newUrgent = availableServices.find(
+          (s) => s.urgent && arrived.includes(s.id) && !seenUrgentModalRef.current.has(s.id)
+        );
+        if (newUrgent) {
+          seenUrgentModalRef.current.add(newUrgent.id);
+          setUrgentModalService(newUrgent);
+        }
+      }
       // Clear "new" badge after 30s
       const t = setTimeout(() => {
         setNewServiceIds((prev) => {
@@ -355,16 +568,18 @@ export default function GlobalScreen() {
     } else {
       seenIdsRef.current = currentIds;
     }
-  }, [availableServices]);
+  }, [availableServices, isPaidPlan]);
 
-  // ── Count urgent for header indicator ─────────────────────────────────────
+  // ── Count visible urgent for header indicator ──────────────────────────────
   useEffect(() => {
-    setUrgentCount(availableServices.filter((s) => s.urgent).length);
-  }, [availableServices]);
+    setUrgentCount(isPaidPlan ? availableServices.filter((s) => s.urgent).length : 0);
+  }, [availableServices, isPaidPlan]);
 
   // Sort: urgent first, then user's city, then by value desc
   const sortedServices = useMemo(() => {
-    return [...availableServices].sort((a, b) => {
+    // Free plan: filter out urgent services
+    const base = isPaidPlan ? availableServices : availableServices.filter((s) => !s.urgent);
+    return [...base].sort((a, b) => {
       if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
       const aLocal = a.city === USER_CITY ? 1 : 0;
       const bLocal = b.city === USER_CITY ? 1 : 0;
@@ -447,6 +662,13 @@ export default function GlobalScreen() {
         ]
       );
     }
+  };
+
+  // Called from the Uber-style modal — accepts then closes modal
+  const handleUrgentAccept = async () => {
+    const svc = urgentModalService;
+    setUrgentModalService(null);
+    if (svc) await handleAccept(svc);
   };
 
   const handleRefresh = async () => {
@@ -581,6 +803,32 @@ export default function GlobalScreen() {
         )}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         SectionSeparatorComponent={() => <View style={{ height: 6 }} />}
+        ListFooterComponent={
+          blockedUrgentCount > 0 ? (
+            <Pressable
+              style={styles.urgentLockedTeaser}
+              onPress={() => router.push("/(tabs)/profile")}
+            >
+              <View style={styles.urgentLockedLeft}>
+                <View style={styles.urgentLockedIconWrap}>
+                  <Ionicons name="lock-closed" size={20} color="#FF3B5C" />
+                </View>
+                <View style={{ gap: 3 }}>
+                  <Text style={styles.urgentLockedTitle}>
+                    {blockedUrgentCount} chamada{blockedUrgentCount !== 1 ? "s" : ""} prioritária{blockedUrgentCount !== 1 ? "s" : ""} bloqueada{blockedUrgentCount !== 1 ? "s" : ""}
+                  </Text>
+                  <Text style={styles.urgentLockedDesc}>
+                    Assine um plano para receber chamadas urgentes com <Text style={{ color: "#FF3B5C" }}>+R$10 por serviço</Text>
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.urgentLockedArrow}>
+                <Text style={styles.urgentLockedCta}>Ver planos</Text>
+                <Ionicons name="chevron-forward" size={14} color="#FF3B5C" />
+              </View>
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
@@ -620,6 +868,14 @@ export default function GlobalScreen() {
         onCitySelect={setFilterCity}
         onNeighborhoodSelect={setFilterNeighborhood}
         onClear={() => { setFilterCity(""); setFilterNeighborhood(""); }}
+      />
+
+      {/* Uber-style urgent call modal — only for paid plan providers */}
+      <UrgentCallModal
+        service={urgentModalService}
+        visible={!!urgentModalService}
+        onAccept={handleUrgentAccept}
+        onDismiss={() => setUrgentModalService(null)}
       />
     </View>
   );
@@ -929,4 +1185,31 @@ const styles = StyleSheet.create({
     alignItems: "center", marginTop: 16,
   },
   applyBtnText: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#000" },
+
+  // Urgent locked teaser (free plan)
+  urgentLockedTeaser: {
+    marginTop: 14,
+    marginHorizontal: 0,
+    backgroundColor: "rgba(255,59,92,0.07)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,59,92,0.35)",
+    borderStyle: "dashed",
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  urgentLockedLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  urgentLockedIconWrap: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: "rgba(255,59,92,0.12)",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(255,59,92,0.25)",
+  },
+  urgentLockedTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#FF3B5C" },
+  urgentLockedDesc: { fontSize: 11, fontFamily: "Inter_400Regular", color: C.textSecondary, lineHeight: 16 },
+  urgentLockedArrow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  urgentLockedCta: { fontSize: 12, fontFamily: "Inter_700Bold", color: "#FF3B5C" },
 });
