@@ -12,7 +12,9 @@
   "scripts": {
     "build": "npm run typecheck && npm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "npm run typecheck:libs && npm -r --if-present run typecheck"
+    "typecheck": "npm run typecheck:libs && npm -r --if-present run typecheck",
+    "render:build": "node scripts/render-build.mjs",
+    "render:start": "node --enable-source-maps artifacts/api-server/dist/index.mjs"
   },
   "devDependencies": {
     "prettier": "^3.8.1",

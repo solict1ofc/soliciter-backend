@@ -5,8 +5,13 @@ import express, { type Express } from "express";
 import pinoHttp from "pino-http";
 import rateLimit from "express-rate-limit";
 import { MercadoPagoConfig, Payment } from "mercadopago";
+import { existsSync, readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import router from "./routes";
 import { logger } from "./lib/logger";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app: Express = express();
 
@@ -104,5 +109,71 @@ app.use("/api/auth", authLimiter);
 app.use("/api", apiLimiter);
 
 app.use("/api", router);
+
+// ── Static file serving (production / Render) ─────────────────────────────────
+// Paths are relative to the compiled dist/ output directory:
+//   dist/index.mjs → artifacts/api-server/dist/
+//   ../../admin/dist/public  → artifacts/admin/dist/public
+//   ../../mobile/static-build → artifacts/mobile/static-build
+
+const adminDist = path.resolve(__dirname, "../../admin/dist/public");
+const mobileDist = path.resolve(__dirname, "../../mobile/static-build");
+const mobileLandingTmpl = path.resolve(
+  __dirname,
+  "../../mobile/server/templates/landing-page.html"
+);
+
+// Admin SPA at /admin/*
+if (existsSync(adminDist)) {
+  app.use("/admin", express.static(adminDist, { index: false }));
+
+  // All /admin/* paths fall back to index.html (SPA routing)
+  app.get(/^\/admin(\/.*)?$/, (req, res) => {
+    res.sendFile(path.join(adminDist, "index.html"));
+  });
+
+  logger.info({ adminDist }, "Serving admin panel at /admin");
+}
+
+// Mobile Expo Go manifests + landing page at /
+if (existsSync(mobileDist)) {
+  // Platform manifests (consumed by Expo Go on-device)
+  app.get(["/", "/manifest"], (req, res, next) => {
+    const platform = req.headers["expo-platform"] as string | undefined;
+    if (platform === "ios" || platform === "android") {
+      const manifestPath = path.join(mobileDist, platform, "manifest.json");
+      if (existsSync(manifestPath)) {
+        return res
+          .set({
+            "content-type": "application/json",
+            "expo-protocol-version": "1",
+            "expo-sfv-version": "0",
+          })
+          .sendFile(manifestPath);
+      }
+    }
+    next();
+  });
+
+  // Landing page (QR code page for browsers)
+  if (existsSync(mobileLandingTmpl)) {
+    app.get("/", (req, res) => {
+      const tmpl = readFileSync(mobileLandingTmpl, "utf-8");
+      const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+      const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
+      const baseUrl = `${proto}://${host}`;
+      const html = tmpl
+        .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
+        .replace(/EXPS_URL_PLACEHOLDER/g, host)
+        .replace(/APP_NAME_PLACEHOLDER/g, "SOLICITE");
+      return res.send(html);
+    });
+  }
+
+  // Static Expo assets (bundles, images, fonts)
+  app.use(express.static(mobileDist));
+
+  logger.info({ mobileDist }, "Serving Expo mobile at /");
+}
 
 export default app;

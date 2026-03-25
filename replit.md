@@ -133,3 +133,38 @@ Plans: Basic R$59, Destaque R$79, Premium R$99. Plan UI exists in `profile.tsx` 
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+## Render Deployment
+
+Single Render web service — one Express server serves everything:
+
+| Path | What |
+|------|------|
+| `/api/*` | Express API routes |
+| `/admin` and `/admin/*` | Admin SPA (Vite build, SPA fallback) |
+| `GET /` (with `expo-platform` header) | Expo Go platform manifests (JSON) |
+| `GET /` (without header) | Mobile landing page (QR code) |
+| `/_expo/*`, `/ios/*`, `/android/*` | Expo static bundles + assets |
+
+### Build pipeline (`scripts/render-build.mjs`)
+1. `pnpm --filter @workspace/api-server run build` → `artifacts/api-server/dist/index.mjs`
+2. `BASE_PATH=/admin/ pnpm --filter @workspace/admin run build` → `artifacts/admin/dist/public`
+3. `EXPO_PUBLIC_DOMAIN=$RENDER_EXTERNAL_HOSTNAME pnpm --filter @workspace/mobile run build` → `artifacts/mobile/static-build/`
+
+### Root scripts
+- `pnpm run render:build` — runs all three builds in sequence
+- `pnpm run render:start` — starts the Express server (`artifacts/api-server/dist/index.mjs`)
+
+### Required environment variables on Render
+| Variable | Notes |
+|----------|-------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `MERCADO_PAGO_ACCESS_TOKEN` | Mercado Pago production token |
+| `SESSION_SECRET` | Render can auto-generate |
+| `ADMIN_SECRET` | Token for admin panel login |
+| `NODE_ENV` | Set to `production` |
+
+Render auto-sets `PORT` (10000) and `RENDER_EXTERNAL_HOSTNAME` (used during build for Expo domain).
+
+### Admin security
+`/admin/*` requires Bearer token (`ADMIN_SECRET`) on all API calls — validated server-side via `requireAdmin` middleware in `src/routes/admin.ts`. The admin login page at `/admin/login` tests the token against `/api/admin/payouts` before storing it in `localStorage`.

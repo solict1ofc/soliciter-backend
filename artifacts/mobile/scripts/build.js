@@ -67,8 +67,20 @@ function getDeploymentDomain() {
     return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
   }
 
+  // Render provides RENDER_EXTERNAL_URL (https://...) and RENDER_EXTERNAL_HOSTNAME (just host)
+  if (process.env.RENDER_EXTERNAL_HOSTNAME) {
+    return process.env.RENDER_EXTERNAL_HOSTNAME;
+  }
+
+  if (process.env.RENDER_EXTERNAL_URL) {
+    return stripProtocol(process.env.RENDER_EXTERNAL_URL);
+  }
+
   console.error(
-    "ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN",
+    "ERROR: No deployment domain found. Set one of:\n" +
+    "  EXPO_PUBLIC_DOMAIN   (e.g. your-app.onrender.com)\n" +
+    "  RENDER_EXTERNAL_HOSTNAME  (auto-set by Render)\n" +
+    "  REPLIT_DEV_DOMAIN         (auto-set by Replit)"
   );
   process.exit(1);
 }
