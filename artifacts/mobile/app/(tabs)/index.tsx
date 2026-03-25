@@ -618,6 +618,43 @@ export default function SolicitacoesScreen() {
     }
   };
 
+  /**
+   * checkPaymentStatus — polls /api/payment/status once and returns true if paid.
+   */
+  const checkPaymentStatus = async (serviceId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/payment/status/${serviceId}`);
+      if (!res.ok) return false;
+      const { status } = await res.json();
+      return status === "paid";
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * waitForPayment — checks payment status immediately, then retries up to maxRetries × intervalMs.
+   * Returns true as soon as Stripe confirms payment. No artificial delays.
+   */
+  const waitForPayment = async (serviceId: string, maxRetries = 10, intervalMs = 1000): Promise<boolean> => {
+    // Immediate check — if success_url already ran, this returns true instantly
+    if (await checkPaymentStatus(serviceId)) return true;
+    // Retry loop (max 10s by default)
+    for (let i = 0; i < maxRetries; i++) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      if (await checkPaymentStatus(serviceId)) return true;
+    }
+    return false;
+  };
+
+  /**
+   * openStripeCheckout — creates checkout session, opens Stripe in browser, waits for real confirmation.
+   *
+   * NATIVE: opens in-app browser, waits for dismiss, immediately checks Stripe DB,
+   *         retries up to 10s. No fake timeouts.
+   * WEB:    redirects full page to Stripe. On return, syncPendingPayments (AppContext startup)
+   *         reconciles the payment automatically — returns false here so UI doesn't block.
+   */
   const openStripeCheckout = async (serviceId: string, svc: Service): Promise<boolean> => {
     try {
       const amountInCents = Math.round(svc.finalValue * 100);
@@ -641,21 +678,35 @@ export default function SolicitacoesScreen() {
         Alert.alert("Erro", "URL de pagamento inválida.");
         return false;
       }
+
+      if (Platform.OS === "web") {
+        // Web: open Stripe in a new tab — keep the app open for status monitoring
+        const stripeTab = window.open(url, "_blank");
+        if (!stripeTab) {
+          // Popup blocked — fall back to full redirect; syncPendingPayments handles return
+          window.location.href = url;
+          return false;
+        }
+        // Poll while the tab is open (60 × 2s = 2 min max)
+        // Returns true as soon as Stripe confirms payment in our DB
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          if (await checkPaymentStatus(serviceId)) {
+            stripeTab.close();
+            return true;
+          }
+          if (stripeTab.closed) break; // User closed tab manually
+        }
+        // Final check after user closed tab
+        return await checkPaymentStatus(serviceId);
+      }
+
+      // Native: open in-app browser, await user dismissal, then verify with Stripe
       await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: "close" });
 
-      // Poll for payment status — 120s total (60 × 2s) to give user time on Stripe checkout
-      for (let i = 0; i < 60; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        try {
-          const statusRes = await fetch(`${API_BASE}/payment/status/${serviceId}`);
-          if (statusRes.ok) {
-            const { status } = await statusRes.json();
-            if (status === "paid") return true;
-          }
-        } catch (_) {}
-      }
-      return false;
-    } catch (error: any) {
+      // Browser dismissed — check Stripe immediately (success_url should have already run)
+      return await waitForPayment(serviceId);
+    } catch {
       Alert.alert("Erro de conexão", "Verifique sua internet e tente novamente.");
       return false;
     }

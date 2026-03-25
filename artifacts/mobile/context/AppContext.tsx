@@ -120,17 +120,57 @@ function useAppContextValue() {
         AsyncStorage.getItem(SERVICES_KEY),
         AsyncStorage.getItem(PROVIDER_KEY),
       ]);
-      setServices(servicesJson ? JSON.parse(servicesJson) : []);
+      const loaded: Service[] = servicesJson ? JSON.parse(servicesJson) : [];
+      setServices(loaded);
       if (providerJson) {
         const saved = JSON.parse(providerJson) as ProviderProfile;
         setProvider({ withdrawn: 0, ...saved });
       } else {
         setProvider(makeDefaultProvider(userId));
       }
+      // After loading, reconcile any pending payments with Stripe DB
+      // This handles: app restart after payment, web redirect flow
+      if (userId !== "guest") {
+        syncPendingPayments(loaded, SERVICES_KEY);
+      }
     } catch {
       // silent
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * syncPendingPayments — called on startup to reconcile local state with Stripe DB.
+   * Finds services stuck in "pending_payment" and checks if Stripe already confirmed them.
+   * Updates local state automatically if paid — no user action needed.
+   */
+  const syncPendingPayments = async (currentServices: Service[], storageKey: string) => {
+    const pending = currentServices.filter((s) => s.status === "pending_payment");
+    if (pending.length === 0) return;
+
+    let updated = false;
+    const reconciled = await Promise.all(
+      currentServices.map(async (s) => {
+        if (s.status !== "pending_payment") return s;
+        try {
+          const res = await fetch(`${API_BASE}/payment/status/${s.id}`);
+          if (!res.ok) return s;
+          const { status } = await res.json();
+          if (status === "paid") {
+            updated = true;
+            return { ...s, status: "available" as ServiceStatus };
+          }
+        } catch {
+          // network error — keep as-is
+        }
+        return s;
+      })
+    );
+
+    if (updated) {
+      setServices(reconciled);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(reconciled));
     }
   };
 

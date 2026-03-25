@@ -166,6 +166,7 @@ router.get("/payment/success", async (req, res) => {
       background: rgba(0,212,255,0.1); border: 1px solid rgba(0,212,255,0.3);
       border-radius: 12px; padding: 12px 20px; color: #00D4FF; font-size: 13px;
     }
+    .countdown { color: #555; font-size: 13px; margin-top: 4px; }
     .btn {
       background: #00D4FF; color: #000; border: none; border-radius: 14px;
       padding: 16px 40px; font-size: 17px; font-weight: 700; cursor: pointer;
@@ -178,7 +179,23 @@ router.get("/payment/success", async (req, res) => {
   <h1>Pagamento Confirmado!</h1>
   <p>Sua solicitação foi publicada com sucesso.<br>Prestadores já podem vê-la no marketplace.</p>
   <div class="badge">🔒 Valor em custódia — liberado após conclusão</div>
-  <button class="btn" onclick="window.close()">Voltar ao App</button>
+  <button class="btn" onclick="closeAndReturn()">Voltar ao App</button>
+  <p class="countdown" id="cd">Fechando em 4s...</p>
+  <script>
+    function closeAndReturn() {
+      window.close();
+      // Fallback: if window.close() didn't work (e.g. same-tab redirect flow),
+      // navigate to the app root after a brief delay
+      setTimeout(function() { history.back(); }, 300);
+    }
+    var t = 4;
+    var iv = setInterval(function() {
+      t--;
+      var el = document.getElementById('cd');
+      if (el) el.textContent = t > 0 ? 'Fechando em ' + t + 's...' : 'Fechando...';
+      if (t <= 0) { clearInterval(iv); closeAndReturn(); }
+    }, 1000);
+  </script>
 </body>
 </html>`);
 });
