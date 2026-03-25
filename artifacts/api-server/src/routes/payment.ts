@@ -1,4 +1,4 @@
-import { db, servicePaymentsTable } from "@workspace/db";
+import { db, payoutsTable, servicePaymentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { MercadoPagoConfig, Payment } from "mercadopago";
@@ -236,20 +236,36 @@ router.post("/payment/release/:serviceId", async (req, res) => {
     const providerAmount = totalAmount - platformAmount;
     const now            = new Date();
 
+    const finalProviderId = providerId ?? payment.providerId ?? "unknown";
+
     await db
       .update(servicePaymentsTable)
       .set({
         status: "released",
         releasedAt: now,
-        providerId: providerId ?? payment.providerId,
+        providerId: finalProviderId,
         providerAmount,
         platformAmount,
       })
       .where(eq(servicePaymentsTable.serviceId, serviceId));
 
+    // Cria registro de payout para gestão de pagamentos ao prestador
+    await db
+      .insert(payoutsTable)
+      .values({
+        serviceId,
+        providerId:     finalProviderId,
+        paymentId:      payment.paymentId,
+        totalAmount,
+        platformFee:    platformAmount,
+        providerAmount,
+        status:         "pending",
+      })
+      .onConflictDoNothing();
+
     logger.info(
-      { serviceId, providerId, totalAmount, providerAmount, platformAmount },
-      "[payment] Pagamento liberado — 90% prestador / 10% plataforma"
+      { serviceId, providerId: finalProviderId, totalAmount, providerAmount, platformAmount },
+      "[payment] Pagamento liberado — 90% prestador / 10% plataforma — payout criado"
     );
 
     return res.json({

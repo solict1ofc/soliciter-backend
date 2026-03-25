@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import adminRouter   from "./admin";
 import authRouter    from "./auth";
 import healthRouter  from "./health";
 import paymentRouter from "./payment";
@@ -12,5 +13,6 @@ router.use(authRouter);
 router.use(paymentRouter);  // POST /create-payment, GET /payment-status/:id, POST /payment/release/:id
 router.use(webhookRouter);  // POST /webhook (Mercado Pago notifications)
 router.use(serviceRouter);
+router.use(adminRouter);  // GET|PUT /admin/payouts (requires ADMIN_SECRET)
 
 export default router;

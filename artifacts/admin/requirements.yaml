@@ -1,0 +1,18 @@
+packages:
+  "framer-motion": "Animations and page transitions for premium feel"
+  "date-fns": "Date formatting"
+  "lucide-react": "Icons"
+  "clsx": "Utility for conditionally joining classNames"
+  "tailwind-merge": "Utility to merge tailwind classes safely"
+  "@tanstack/react-query": "Data fetching"
+  "wouter": "Routing"
+
+images:
+  - path: "artifacts/admin/public/images/auth-bg.png"
+    description: "Dark, abstract tech financial background with glowing cyan and purple digital grid lines and subtle glowing particles, extremely high quality, 4k"
+    aspect_ratio: "16:9"
+
+notes:
+  - API base is `/api`
+  - Authentication requires Bearer token via Authorization header
+  - Theme is dark tech financial (Cyan #00D4FF, Purple #6C63FF, Dark #0A0A0F)

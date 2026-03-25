@@ -8,3 +8,68 @@
 export interface HealthStatus {
   status: string;
 }
+
+export type PayoutStatus = (typeof PayoutStatus)[keyof typeof PayoutStatus];
+
+export const PayoutStatus = {
+  pending: "pending",
+  paid: "paid",
+} as const;
+
+export interface Payout {
+  id: number;
+  serviceId: string;
+  providerId: string;
+  paymentId?: string | null;
+  /** Amount in cents */
+  totalAmount: number;
+  /** Platform fee in cents (10%) */
+  platformFee: number;
+  /** Amount to pay provider in cents (90%) */
+  providerAmount: number;
+  status: PayoutStatus;
+  paidAt?: string | null;
+  createdAt?: string | null;
+  providerName?: string | null;
+  providerEmail?: string | null;
+}
+
+export interface ProviderSummary {
+  providerId: string;
+  providerName?: string | null;
+  providerEmail?: string | null;
+  /** Total pending amount in cents */
+  totalPending: number;
+  /** Total paid amount in cents */
+  totalPaid: number;
+  countPending: number;
+  countPaid: number;
+}
+
+export type ListPayoutsParams = {
+  /**
+   * Filter by status
+   */
+  status?: ListPayoutsStatus;
+};
+
+export type ListPayoutsStatus =
+  (typeof ListPayoutsStatus)[keyof typeof ListPayoutsStatus];
+
+export const ListPayoutsStatus = {
+  pending: "pending",
+  paid: "paid",
+} as const;
+
+export type ListPayouts200 = {
+  payouts?: Payout[];
+};
+
+export type GetPayoutsSummary200 = {
+  summary?: ProviderSummary[];
+};
+
+export type MarkPayoutPaid200 = {
+  ok?: boolean;
+  alreadyPaid?: boolean;
+};

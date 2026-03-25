@@ -14,3 +14,65 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Returns all payouts, optionally filtered by status. Requires admin token.
+ * @summary List all payouts
+ */
+export const ListPayoutsQueryParams = zod.object({
+  status: zod.enum(["pending", "paid"]).optional().describe("Filter by status"),
+});
+
+export const ListPayoutsResponse = zod.object({
+  payouts: zod
+    .array(
+      zod.object({
+        id: zod.number(),
+        serviceId: zod.string(),
+        providerId: zod.string(),
+        paymentId: zod.string().nullish(),
+        totalAmount: zod.number().describe("Amount in cents"),
+        platformFee: zod.number().describe("Platform fee in cents (10%)"),
+        providerAmount: zod
+          .number()
+          .describe("Amount to pay provider in cents (90%)"),
+        status: zod.enum(["pending", "paid"]),
+        paidAt: zod.date().nullish(),
+        createdAt: zod.date().nullish(),
+        providerName: zod.string().nullish(),
+        providerEmail: zod.string().nullish(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary Payouts summary grouped by provider
+ */
+export const GetPayoutsSummaryResponse = zod.object({
+  summary: zod
+    .array(
+      zod.object({
+        providerId: zod.string(),
+        providerName: zod.string().nullish(),
+        providerEmail: zod.string().nullish(),
+        totalPending: zod.number().describe("Total pending amount in cents"),
+        totalPaid: zod.number().describe("Total paid amount in cents"),
+        countPending: zod.number(),
+        countPaid: zod.number(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary Mark a payout as paid
+ */
+export const MarkPayoutPaidParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkPayoutPaidResponse = zod.object({
+  ok: zod.boolean().optional(),
+  alreadyPaid: zod.boolean().optional(),
+});

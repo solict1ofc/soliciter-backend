@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: admin
+    description: Admin payout management
 paths:
   /healthz:
     get:
@@ -24,7 +26,95 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /admin/payouts:
+    get:
+      operationId: listPayouts
+      tags: [admin]
+      summary: List all payouts
+      description: Returns all payouts, optionally filtered by status. Requires admin token.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, paid]
+          description: Filter by status
+      responses:
+        "200":
+          description: List of payouts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payouts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payout"
+        "401":
+          description: Unauthorized
+
+  /admin/payouts/summary:
+    get:
+      operationId: getPayoutsSummary
+      tags: [admin]
+      summary: Payouts summary grouped by provider
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Summary by provider
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProviderSummary"
+        "401":
+          description: Unauthorized
+
+  /admin/payouts/{id}/paid:
+    put:
+      operationId: markPayoutPaid
+      tags: [admin]
+      summary: Mark a payout as paid
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Payout marked as paid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  alreadyPaid:
+                    type: boolean
+        "401":
+          description: Unauthorized
+        "404":
+          description: Payout not found
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +124,77 @@ components:
       required:
         - status
 
+    Payout:
+      type: object
+      properties:
+        id:
+          type: integer
+        serviceId:
+          type: string
+        providerId:
+          type: string
+        paymentId:
+          type: string
+          nullable: true
+        totalAmount:
+          type: integer
+          description: Amount in cents
+        platformFee:
+          type: integer
+          description: Platform fee in cents (10%)
+        providerAmount:
+          type: integer
+          description: Amount to pay provider in cents (90%)
+        status:
+          type: string
+          enum: [pending, paid]
+        paidAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+        providerName:
+          type: string
+          nullable: true
+        providerEmail:
+          type: string
+          nullable: true
+      required:
+        - id
+        - serviceId
+        - providerId
+        - totalAmount
+        - platformFee
+        - providerAmount
+        - status
+
+    ProviderSummary:
+      type: object
+      properties:
+        providerId:
+          type: string
+        providerName:
+          type: string
+          nullable: true
+        providerEmail:
+          type: string
+          nullable: true
+        totalPending:
+          type: integer
+          description: Total pending amount in cents
+        totalPaid:
+          type: integer
+          description: Total paid amount in cents
+        countPending:
+          type: integer
+        countPaid:
+          type: integer
+      required:
+        - providerId
+        - totalPending
+        - totalPaid
+        - countPending
+        - countPaid
