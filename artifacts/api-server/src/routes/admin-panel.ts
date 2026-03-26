@@ -1,6 +1,12 @@
-import { db, servicePaymentsTable, payoutsTable } from "@workspace/db";
+import { db, servicePaymentsTable, payouts } from "@workspace/db";
 import { sql, desc } from "drizzle-orm";
-import { Router, type Request, type Response, type NextFunction } from "express";
+import {
+  Router,
+  type Request,
+
+  type Response,
+  type NextFunction,
+} from "express";
 
 const router = Router();
 
@@ -18,19 +24,19 @@ router.get("/teste", async (_req: Request, res: Response) => {
   try {
     const [row] = await db
       .select({
-        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
-        totalPago:        sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        totalPendente:    sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        qtdTransacoes:    sql<number>`COUNT(*)::int`,
+        totalArrecadado: sql<number>`COALESCE(SUM(${payouts.platformFee}), 0)::int`,
+        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'paid' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
+        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'pending' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
+        qtdTransacoes: sql<number>`COUNT(*)::int`,
       })
-      .from(payoutsTable);
+      .from(payouts);
 
     return res.json({
       saldo: {
         totalArrecadado: row?.totalArrecadado ?? 0,
-        totalPago:        row?.totalPago        ?? 0,
-        totalPendente:    row?.totalPendente    ?? 0,
-        qtdTransacoes:    row?.qtdTransacoes    ?? 0,
+        totalPago: row?.totalPago ?? 0,
+        totalPendente: row?.totalPendente ?? 0,
+        qtdTransacoes: row?.qtdTransacoes ?? 0,
         moeda: "BRL (centavos)",
       },
     });
@@ -87,19 +93,19 @@ router.get("/saldo", async (_req: Request, res: Response) => {
   try {
     const [row] = await db
       .select({
-        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
-        totalPago:        sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        totalPendente:    sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        qtdTransacoes:    sql<number>`COUNT(*)::int`,
+        totalArrecadado: sql<number>`COALESCE(SUM(${payouts.platformFee}), 0)::int`,
+        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'paid' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
+        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'pending' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
+        qtdTransacoes: sql<number>`COUNT(*)::int`,
       })
-      .from(payoutsTable);
+      .from(payouts);
 
     return res.json({
       saldo: {
-        totalArrecadado:  row?.totalArrecadado  ?? 0,
-        totalPago:         row?.totalPago         ?? 0,
-        totalPendente:     row?.totalPendente     ?? 0,
-        qtdTransacoes:     row?.qtdTransacoes     ?? 0,
+        totalArrecadado: row?.totalArrecadado ?? 0,
+        totalPago: row?.totalPago ?? 0,
+        totalPendente: row?.totalPendente ?? 0,
+        qtdTransacoes: row?.qtdTransacoes ?? 0,
         moeda: "BRL (centavos)",
       },
     });
