@@ -1,4 +1,4 @@
-import { db, servicePaymentsTable } from "@workspace/db";
+import { db, pool, servicePaymentsTable } from "@workspace/db";
 import cors from "cors";
 import { eq } from "drizzle-orm";
 import express, { type Express } from "express";
@@ -22,6 +22,21 @@ app.set("trust proxy", 1);
 // ── Health check — must be FIRST so Render marks the service as healthy ────────
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", ts: new Date().toISOString() });
+});
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+app.get("/", (_req, res) => {
+  res.send("API funcionando 🚀");
+});
+
+// ── Payouts (raw pg Pool query) ───────────────────────────────────────────────
+app.get("/payouts", async (_req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM payouts ORDER BY created_at DESC");
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Mercado Pago webhook — must be BEFORE express.json() ──────────────────────
