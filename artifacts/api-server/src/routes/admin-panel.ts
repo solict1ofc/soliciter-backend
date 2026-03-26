@@ -1,4 +1,4 @@
-import { db, servicePaymentsTable, payouts } from "@workspace/db";
+import { db, servicePaymentsTable, payoutsTable } from "@workspace/db";
 import { sql, desc } from "drizzle-orm";
 import {
   Router,
@@ -24,12 +24,12 @@ router.get("/teste", async (_req: Request, res: Response) => {
   try {
     const [row] = await db
       .select({
-        totalArrecadado: sql<number>`COALESCE(SUM(${payouts.platformFee}), 0)::int`,
-        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'paid' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
-        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'pending' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
+        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
+        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
+        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
         qtdTransacoes: sql<number>`COUNT(*)::int`,
       })
-      .from(payouts);
+      .from(payoutsTable);
 
     return res.json({
       saldo: {
@@ -93,12 +93,12 @@ router.get("/saldo", async (_req: Request, res: Response) => {
   try {
     const [row] = await db
       .select({
-        totalArrecadado: sql<number>`COALESCE(SUM(${payouts.platformFee}), 0)::int`,
-        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'paid' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
-        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payouts.status} = 'pending' THEN ${payouts.platformFee} ELSE 0 END), 0)::int`,
+        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
+        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
+        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
         qtdTransacoes: sql<number>`COUNT(*)::int`,
       })
-      .from(payouts);
+      .from(payoutsTable);
 
     return res.json({
       saldo: {
