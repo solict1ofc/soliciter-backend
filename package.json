@@ -1,24 +1,24 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
+  "name": "solicite",
+  "version": "1.0.0",
   "license": "MIT",
   "private": true,
-  "workspaces": [
-    "artifacts/*",
-    "lib/*",
-    "lib/integrations/*",
-    "scripts"
-  ],
+  "type": "module",
   "scripts": {
-    "build": "npm run typecheck && npm -r --if-present run build",
+    "build": "node build.mjs",
+    "start": "node server.js",
+    "dev:api": "pnpm --filter @workspace/api-server run dev",
+    "dev:admin": "pnpm --filter @workspace/admin run dev",
     "typecheck:libs": "tsc --build",
-    "typecheck": "npm run typecheck:libs && npm -r --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --if-present run typecheck"
   },
   "devDependencies": {
+    "esbuild": "^0.25.8",
+    "esbuild-plugin-pino": "^2.3.3",
+    "pino": "^9",
+    "pino-pretty": "^13",
     "prettier": "^3.8.1",
+    "thread-stream": "3.1.0",
     "typescript": "~5.9.2"
-  },
-  "dependencies": {
-    "@replit/connectors-sdk": "^0.3.0"
   }
 }

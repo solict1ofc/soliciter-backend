@@ -2,6 +2,12 @@
 
 # compiled output
 dist
+# Keep pre-built admin panel so Render can serve it without rebuilding
+!artifacts/admin/dist/
+!artifacts/admin/dist/**
+# Keep pre-built API server bundle so Render can run it without compiling
+!artifacts/api-server/dist/
+!artifacts/api-server/dist/**
 tmp
 out-tsc
 *.tsbuildinfo
