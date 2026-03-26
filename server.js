@@ -1,5 +1,6 @@
-// Entry point — starts the pre-built server bundle (created by npm run build)
-import("./dist/index.mjs").catch((err) => {
-  console.error(err);
+// Entry point — starts the compiled server bundle
+// Build step: cd artifacts/api-server && npm install && node build.mjs
+import("./artifacts/api-server/dist/index.mjs").catch((err) => {
+  console.error("[server.js] Failed to start:", err.message);
   process.exit(1);
 });
