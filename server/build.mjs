@@ -1,16 +1,13 @@
 /**
  * server/build.mjs
- * Self-contained build script for Render deployment.
+ * Self-contained build + start script for Render deployment.
  * Uses only npm (no pnpm / workspace protocol needed).
  *
- * What it does:
- *   1. Bundles the API server TypeScript into dist/index.mjs using esbuild.
- *      Workspace libs (@workspace/db, @workspace/api-zod) are resolved by
- *      path alias and fully inlined — no workspace:* resolution required.
- *   2. Copies the pre-built admin panel into dist/admin-public/.
+ * When called via `npm run build` → builds the bundle only.
+ * When called via `npm start`     → builds the bundle, then starts the server.
  *
- * Build:  npm install && npm run build   (or: node build.mjs)
- * Start:  npm start
+ * Build:  npm install && npm run build
+ * Start:  npm start              (runs: node server/build.mjs)
  */
 
 import { createRequire } from "node:module";
@@ -22,15 +19,18 @@ import esbuildPluginPino from "esbuild-plugin-pino";
 
 globalThis.require = createRequire(import.meta.url);
 
-const serverDir  = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot   = path.resolve(serverDir, "..");
-const distDir    = path.resolve(serverDir, "dist");
+const serverDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot  = path.resolve(serverDir, "..");
+const distDir   = path.resolve(serverDir, "dist");
 
-async function main() {
-  // Clean dist
+// Detect whether we're being run as the start script or the build script.
+// npm sets this env var automatically when running package.json scripts.
+const lifecycleEvent = process.env.npm_lifecycle_event; // 'start' | 'build' | undefined
+
+async function bundle() {
   await rm(distDir, { recursive: true, force: true });
 
-  // ── 1. Bundle API server ─────────────────────────────────────────────────
+  // ── 1. Bundle API server ───────────────────────────────────────────────────
   console.log("\n▶ Bundling API server…");
   await esbuild({
     entryPoints: [path.resolve(repoRoot, "artifacts/api-server/src/index.ts")],
@@ -43,9 +43,9 @@ async function main() {
 
     // Resolve workspace packages by source path — no workspace protocol needed
     alias: {
-      "@workspace/db":         path.resolve(repoRoot, "lib/db/src/index.ts"),
-      "@workspace/db/schema":  path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
-      "@workspace/api-zod":    path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
+      "@workspace/db":        path.resolve(repoRoot, "lib/db/src/index.ts"),
+      "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
+      "@workspace/api-zod":   path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
     },
 
     external: [
@@ -70,18 +70,28 @@ globalThis.__dirname  = __bannerPath.dirname(globalThis.__filename);
     },
   });
 
-  // ── 2. Copy pre-built admin panel ────────────────────────────────────────
+  // ── 2. Copy pre-built admin panel ─────────────────────────────────────────
   const adminSrc  = path.resolve(repoRoot, "artifacts/admin/dist/public");
   const adminDest = path.resolve(distDir, "admin-public");
   console.log("\n▶ Copying admin panel…");
   try {
     await cp(adminSrc, adminDest, { recursive: true });
-    console.log(`  ✓ Admin copied → dist/admin-public/`);
+    console.log("  ✓ Admin copied → dist/admin-public/");
   } catch {
     console.warn("  ⚠ Admin dist not found — skipping (run admin build first)");
   }
+}
 
-  console.log("\n✅ Build complete — run: npm start");
+async function main() {
+  await bundle();
+
+  if (lifecycleEvent === "start") {
+    // ── 3. Start the server (only when invoked via `npm start`) ───────────────
+    console.log("\n▶ Starting server…");
+    await import("./dist/index.mjs");
+  } else {
+    console.log("\n✅ Build complete — run: npm start");
+  }
 }
 
 main().catch((err) => {
