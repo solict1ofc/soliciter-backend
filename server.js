@@ -1,6 +1,10 @@
-// Entry point — starts the compiled server bundle
-// Build step: cd artifacts/api-server && npm install && node build.mjs
-import("./artifacts/api-server/dist/index.mjs").catch((err) => {
-  console.error("[server.js] Failed to start:", err.message);
-  process.exit(1);
-});
+// Starts the API server — no build step required
+import { spawnSync } from "child_process";
+
+const result = spawnSync(
+  "./artifacts/api-server/node_modules/.bin/tsx",
+  ["artifacts/api-server/src/index.ts"],
+  { stdio: "inherit", env: process.env }
+);
+
+process.exit(result.status ?? 0);
