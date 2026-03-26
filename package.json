@@ -20,5 +20,8 @@
     "prettier": "^3.8.1",
     "thread-stream": "3.1.0",
     "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "tsx": "catalog:"
   }
 }
