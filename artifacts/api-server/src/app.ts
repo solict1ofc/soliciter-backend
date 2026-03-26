@@ -18,6 +18,11 @@ const app: Express = express();
 // Trust the first proxy (required on Replit, Render, and most cloud platforms)
 app.set("trust proxy", 1);
 
+// ── Health check — must be FIRST so Render marks the service as healthy ────────
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", ts: new Date().toISOString() });
+});
+
 // ── Mercado Pago webhook — must be BEFORE express.json() ──────────────────────
 // MP sends JSON directly, no raw body needed (no signature like Stripe)
 app.post("/api/payment/webhook", express.json(), async (req, res) => {
