@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "npm install --prefix server && node server/build.mjs",
-    "start": "node --enable-source-maps server/dist/index.mjs",
+    "start": "node index.js",
     "dev:api": "pnpm --filter @workspace/api-server run dev",
     "dev:admin": "pnpm --filter @workspace/admin run dev",
     "typecheck:libs": "tsc --build",
