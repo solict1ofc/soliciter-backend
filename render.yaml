@@ -3,7 +3,7 @@ services:
     name: solicite
     runtime: node
     plan: starter
-    buildCommand: cd artifacts/api-server && npm install && node build.mjs
+    buildCommand: cd artifacts/api-server && npm install --legacy-peer-deps && node build.mjs
     startCommand: node server.js
     healthCheckPath: /health
     envVars:
