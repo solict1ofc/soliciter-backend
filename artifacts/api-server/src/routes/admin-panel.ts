@@ -13,6 +13,32 @@ function requireToken(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// GET /admin/teste — sem autenticação, retorna saldo da plataforma
+router.get("/teste", async (_req: Request, res: Response) => {
+  try {
+    const [row] = await db
+      .select({
+        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
+        totalPago:        sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
+        totalPendente:    sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
+        qtdTransacoes:    sql<number>`COUNT(*)::int`,
+      })
+      .from(payoutsTable);
+
+    return res.json({
+      saldo: {
+        totalArrecadado: row?.totalArrecadado ?? 0,
+        totalPago:        row?.totalPago        ?? 0,
+        totalPendente:    row?.totalPendente    ?? 0,
+        qtdTransacoes:    row?.qtdTransacoes    ?? 0,
+        moeda: "BRL (centavos)",
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.use(requireToken);
 
 // GET /admin — página HTML
