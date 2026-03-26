@@ -3,7 +3,7 @@ services:
     name: solicite
     runtime: node
     plan: starter
-    buildCommand: cd artifacts/api-server && npm install && node build.mjs
+    buildCommand: cd artifacts/api-server && npm install --include=dev && node build.mjs
     startCommand: node artifacts/api-server/dist/index.mjs
     healthCheckPath: /health
     envVars:
