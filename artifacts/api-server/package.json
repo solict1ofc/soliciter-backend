@@ -15,7 +15,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "drizzle-orm": "^0.45.1",
-    "esbuild": "^0.27.3",
+    "esbuild": "0.25.8",
     "esbuild-plugin-pino": "^2.3.3",
     "express": "^5",
     "express-rate-limit": "^8.3.1",
