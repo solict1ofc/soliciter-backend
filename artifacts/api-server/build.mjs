@@ -29,6 +29,9 @@ async function buildAll() {
       "@workspace/db/schema": path.resolve(repoRoot, "lib/db/src/schema/index.ts"),
       "@workspace/api-zod": path.resolve(repoRoot, "lib/api-zod/src/index.ts"),
     },
+    // Allow lib/db and lib/api-zod source files to resolve their deps from
+    // artifacts/api-server/node_modules (the only place npm installs them on Render)
+    nodePaths: [path.resolve(artifactDir, "node_modules")],
     // Some packages may not be bundleable, so we externalize them
     external: [
       "*.node",
