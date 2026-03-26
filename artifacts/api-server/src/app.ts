@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import router from "./routes";
+import adminPanelRouter from "./routes/admin-panel";
 import { logger } from "./lib/logger";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -114,6 +115,10 @@ app.use("/api/auth", authLimiter);
 app.use("/api", apiLimiter);
 
 app.use("/api", router);
+
+// ── Admin panel simple routes (GET /admin, /admin/pagamentos, /admin/saldo) ───
+// Must be before static file serving so these routes take priority over the SPA
+app.use("/admin", adminPanelRouter);
 
 // ── Static file serving (production / Render) ─────────────────────────────────
 // Paths are relative to the compiled dist/ output directory:
