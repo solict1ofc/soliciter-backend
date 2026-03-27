@@ -65,6 +65,13 @@ export default defineConfig(async ({ command }) => {
         strict: true,
         deny: ["**/.*"],
       },
+      proxy: {
+        "/api": {
+          target: "https://solicite-backend.onrender.com",
+          changeOrigin: true,
+          secure: true,
+        },
+      },
     },
     preview: {
       port,
