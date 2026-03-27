@@ -225,6 +225,8 @@ export default function ProfileScreen() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  // Inline error for withdrawal
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   // ─── Plano PIX payment ──────────────────────────────────────────────────────
   type PlanPixData = { paymentId: string; qrCode: string; pixCode: string; isTestMode: boolean };
@@ -257,12 +259,28 @@ export default function ProfileScreen() {
     setBankAgency(""); setBankAccount(""); setBankAccountType("corrente");
     setWithdrawAmount(""); setWithdrawSuccess(false);
     setWithdrawMethod("pix");
+    setWithdrawError(null);
+  };
+
+  // ─── Validates PIX key: email, CPF, phone (+55...) or random UUID key ─────
+  const validatePixKey = (key: string): boolean => {
+    const k = key.trim();
+    if (!k) return false;
+    // E-mail
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(k)) return true;
+    // CPF: 000.000.000-00 or 11 digits
+    if (/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(k)) return true;
+    // Phone: +5511999999999 or 11999999999 (with optional country code)
+    if (/^(\+?55)?\s*\(?\d{2}\)?\s*9?\d{4}[-\s]?\d{4}$/.test(k)) return true;
+    // Random UUID key (32 hex chars with optional dashes)
+    if (/^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$/.test(k)) return true;
+    return false;
   };
 
   const isWithdrawFormValid = () => {
     const amt = parseFloat(withdrawAmount.replace(",", "."));
     if (isNaN(amt) || amt < 10 || amt > provider.earnings) return false;
-    if (withdrawMethod === "pix") return pixKey.trim().length > 0;
+    if (withdrawMethod === "pix") return validatePixKey(pixKey);
     return !!(bankHolder.trim() && bankCPF.trim() && bankName.trim() && bankAgency.trim() && bankAccount.trim());
   };
 
@@ -920,15 +938,36 @@ export default function ProfileScreen() {
                   <View style={{ gap: 8 }}>
                     <Text style={styles.inputLabel}>Chave PIX</Text>
                     <TextInput
-                      style={styles.withdrawInput}
+                      style={[
+                        styles.withdrawInput,
+                        pixKey.trim().length > 0 && !validatePixKey(pixKey) && {
+                          borderColor: "rgba(255,59,92,0.5)",
+                        },
+                        pixKey.trim().length > 0 && validatePixKey(pixKey) && {
+                          borderColor: "rgba(0,200,150,0.5)",
+                        },
+                      ]}
                       placeholder="CPF, e-mail, telefone ou chave aleatória"
                       placeholderTextColor={C.textMuted}
                       value={pixKey}
-                      onChangeText={setPixKey}
+                      onChangeText={(v) => { setPixKey(v); setWithdrawError(null); }}
                       autoCapitalize="none"
+                      autoCorrect={false}
                       keyboardType="email-address"
                     />
-                    <Text style={styles.withdrawHint}>Ex: 000.000.000-00 · email@dominio.com · +55 (62) 99999-9999</Text>
+                    {pixKey.trim().length > 0 && !validatePixKey(pixKey) && (
+                      <Text style={[styles.withdrawHint, { color: "#FF3B5C" }]}>
+                        ✗ Formato inválido
+                      </Text>
+                    )}
+                    {pixKey.trim().length > 0 && validatePixKey(pixKey) && (
+                      <Text style={[styles.withdrawHint, { color: C.success }]}>
+                        ✓ Chave PIX válida
+                      </Text>
+                    )}
+                    {!(pixKey.trim().length > 0) && (
+                      <Text style={styles.withdrawHint}>Ex: 000.000.000-00 · email@dominio.com · +55 (62) 99999-9999</Text>
+                    )}
                   </View>
                 ) : (
                   <View style={{ gap: 12 }}>
@@ -1032,7 +1071,26 @@ export default function ProfileScreen() {
                     keyboardType="numeric"
                   />
                   <Text style={styles.withdrawHint}>Mínimo R$ 10,00 · Máximo R$ {provider.earnings.toFixed(2)}</Text>
+                  {provider.earnings < 10 && (
+                    <View style={styles.withdrawWarnBanner}>
+                      <Ionicons name="information-circle-outline" size={15} color={C.warning} />
+                      <Text style={styles.withdrawWarnText}>
+                        Saldo insuficiente para saque. Aguarde receber pelo menos R$ 10,00.
+                      </Text>
+                    </View>
+                  )}
                 </View>
+
+                {/* ── Inline error banner ── */}
+                {withdrawError && (
+                  <View style={styles.withdrawErrorBanner}>
+                    <Ionicons name="alert-circle-outline" size={16} color="#FF3B5C" />
+                    <Text style={styles.withdrawErrorText}>{withdrawError}</Text>
+                    <Pressable onPress={() => setWithdrawError(null)} hitSlop={12}>
+                      <Ionicons name="close" size={15} color="#FF3B5C" />
+                    </Pressable>
+                  </View>
+                )}
 
                 <Pressable
                   style={({ pressed }) => [
@@ -1041,34 +1099,52 @@ export default function ProfileScreen() {
                     !isWithdrawFormValid() && { opacity: 0.4 },
                     pressed && { opacity: 0.85 },
                   ]}
-                  disabled={!isWithdrawFormValid() || withdrawing}
+                  disabled={withdrawing}
                   onPress={async () => {
+                    setWithdrawError(null);
                     const amt = parseFloat(withdrawAmount.replace(",", "."));
-                    if (isNaN(amt) || amt < 10) {
-                      Alert.alert("Valor inválido", "O valor mínimo para saque é R$ 10,00.");
+
+                    // ── Validações inline ──────────────────────────────────
+                    if (isNaN(amt) || amt <= 0) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                      setWithdrawError("Informe um valor válido para o saque.");
+                      return;
+                    }
+                    if (amt < 10) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                      setWithdrawError("O valor mínimo para saque é R$ 10,00.");
                       return;
                     }
                     if (amt > provider.earnings) {
-                      Alert.alert("Saldo insuficiente", `Seu saldo disponível é R$ ${provider.earnings.toFixed(2)}.`);
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                      setWithdrawError(`Saldo insuficiente. Seu saldo disponível é R$ ${provider.earnings.toFixed(2)}.`);
                       return;
                     }
-                    if (withdrawMethod === "pix" && !pixKey.trim()) {
-                      Alert.alert("Campo obrigatório", "Informe sua chave PIX para continuar.");
-                      return;
+                    if (withdrawMethod === "pix") {
+                      if (!pixKey.trim()) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        setWithdrawError("Informe sua chave PIX para continuar.");
+                        return;
+                      }
+                      if (!validatePixKey(pixKey)) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        setWithdrawError("Chave PIX inválida. Use e-mail, CPF (000.000.000-00), telefone (+55...) ou chave aleatória.");
+                        return;
+                      }
                     }
                     if (withdrawMethod === "bank") {
-                      if (!bankHolder.trim()) { Alert.alert("Campo obrigatório", "Informe o nome do titular."); return; }
-                      if (!bankCPF.trim()) { Alert.alert("Campo obrigatório", "Informe o CPF do titular."); return; }
-                      if (!bankName.trim()) { Alert.alert("Campo obrigatório", "Informe o banco."); return; }
-                      if (!bankAgency.trim()) { Alert.alert("Campo obrigatório", "Informe a agência."); return; }
-                      if (!bankAccount.trim()) { Alert.alert("Campo obrigatório", "Informe o número da conta."); return; }
+                      if (!bankHolder.trim()) { setWithdrawError("Informe o nome do titular."); return; }
+                      if (!bankCPF.trim())    { setWithdrawError("Informe o CPF do titular."); return; }
+                      if (!bankName.trim())   { setWithdrawError("Informe o nome do banco."); return; }
+                      if (!bankAgency.trim()) { setWithdrawError("Informe a agência bancária."); return; }
+                      if (!bankAccount.trim()){ setWithdrawError("Informe o número da conta."); return; }
                     }
+
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                     setWithdrawing(true);
                     try {
                       // 1. Registrar saque no backend
-                      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
-                      const res = await fetch(`${apiBase}/sacar`, {
+                      const res = await fetch(`${API_BASE}/sacar`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -1084,20 +1160,23 @@ export default function ProfileScreen() {
                           bankType:   withdrawMethod === "bank" ? bankAccountType : undefined,
                         }),
                       });
-                      const data = await res.json();
+                      const data = await res.json().catch(() => ({}));
                       if (!res.ok) {
-                        Alert.alert("Erro no saque", data.error ?? "Não foi possível processar o saque. Tente novamente.");
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        setWithdrawError(data.error ?? "Não foi possível processar o saque. Tente novamente.");
                         return;
                       }
                       // 2. Atualizar saldo local
                       const ok = await withdrawEarnings(amt);
                       if (!ok) {
-                        Alert.alert("Erro", "Saldo insuficiente para saque.");
+                        setWithdrawError("Saldo insuficiente para saque.");
                         return;
                       }
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                       setWithdrawSuccess(true);
-                    } catch {
-                      Alert.alert("Erro de conexão", "Verifique sua conexão e tente novamente.");
+                    } catch (err: any) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                      setWithdrawError("Erro de conexão. Verifique sua internet e tente novamente.");
                     } finally {
                       setWithdrawing(false);
                     }
@@ -2031,6 +2110,41 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: C.textMuted,
     textAlign: "center",
+  },
+  withdrawErrorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255,59,92,0.10)",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,59,92,0.30)",
+  },
+  withdrawErrorText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: "#FF3B5C",
+    lineHeight: 19,
+  },
+  withdrawWarnBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "rgba(255,184,0,0.10)",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,184,0,0.25)",
+    marginTop: 6,
+  },
+  withdrawWarnText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: C.warning,
+    lineHeight: 17,
   },
   withdrawFieldLabel: {
     fontSize: 12,
