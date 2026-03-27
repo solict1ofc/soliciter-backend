@@ -18,7 +18,7 @@ function requireToken(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// GET /admin/teste — sem autenticação, retorna saldo da plataforma
+// 🔹 TESTE — saldo simples
 router.get("/teste", async (_req: Request, res: Response) => {
   try {
     const [row] = await db
@@ -44,20 +44,28 @@ router.get("/teste", async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/pagamentos — lista todos os pagamentos (requer x-admin)
-router.get("/pagamentos", requireToken, async (_req: Request, res: Response) => {
-  try {
-    const payments = await db
-      .select()
-      .from(servicePaymentsTable)
-      .orderBy(desc(servicePaymentsTable.createdAt));
-    return res.json({ total: payments.length, pagamentos: payments });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+// 🔹 LISTA DE PAGAMENTOS
+router.get(
+  "/pagamentos",
+  requireToken,
+  async (_req: Request, res: Response) => {
+    try {
+      const payments = await db
+        .select()
+        .from(servicePaymentsTable)
+        .orderBy(desc(servicePaymentsTable.createdAt));
 
-// GET /admin/saldo — saldo total acumulado da plataforma (requer x-admin)
+      return res.json({
+        total: payments.length,
+        pagamentos: payments,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+// 🔹 SALDO
 router.get("/saldo", requireToken, async (_req: Request, res: Response) => {
   try {
     const [row] = await db
@@ -77,6 +85,37 @@ router.get("/saldo", requireToken, async (_req: Request, res: Response) => {
         qtdTransacoes: row?.qtdTransacoes ?? 0,
         moeda: "BRL (centavos)",
       },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 🔥 DASHBOARD COMPLETO (USADO PELO PAINEL)
+router.get("/dashboard", async (_req: Request, res: Response) => {
+  try {
+    const [resumo] = await db
+      .select({
+        totalTransacoes: sql<number>`COUNT(*)::int`,
+        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.amountToPay} ELSE 0 END), 0)::int`,
+        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.amountToPay} ELSE 0 END), 0)::int`,
+        totalComissao: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
+      })
+      .from(payoutsTable);
+
+    const lista = await db
+      .select()
+      .from(payoutsTable)
+      .orderBy(desc(payoutsTable.createdAt));
+
+    return res.json({
+      resumo: {
+        totalTransacoes: resumo?.totalTransacoes ?? 0,
+        totalPendente: resumo?.totalPendente ?? 0,
+        totalPago: resumo?.totalPago ?? 0,
+        totalComissao: resumo?.totalComissao ?? 0,
+      },
+      lista,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
