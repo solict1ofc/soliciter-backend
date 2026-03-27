@@ -1,121 +1,101 @@
-import { db, servicePaymentsTable, payoutsTable } from "@workspace/db";
-import { sql, desc } from "drizzle-orm";
-import {
-  Router,
-  type Request,
-  type Response,
-  type NextFunction,
-} from "express";
+import { Router, Request, Response } from "express";
+import { db } from "../../../lib/db/src";
+import { payoutsTable } from "../../../lib/db/src/schema";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
-const ADMIN_TOKEN = "123456";
-
-function requireToken(req: Request, res: Response, next: NextFunction) {
-  if (req.headers["x-admin"] !== ADMIN_TOKEN) {
-    return res.status(401).send("Acesso negado");
-  }
-  next();
-}
-
-// 🔹 TESTE — saldo simples
-router.get("/teste", async (_req: Request, res: Response) => {
+// 🔹 SOLICITAR SAQUE
+router.post("/solicitar-saque", async (req: Request, res: Response) => {
   try {
-    const [row] = await db
-      .select({
-        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
-        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        qtdTransacoes: sql<number>`COUNT(*)::int`,
-      })
-      .from(payoutsTable);
+    const { userId, valor, pix, nome, cpf } = req.body;
 
-    return res.json({
-      saldo: {
-        totalArrecadado: row?.totalArrecadado ?? 0,
-        totalPago: row?.totalPago ?? 0,
-        totalPendente: row?.totalPendente ?? 0,
-        qtdTransacoes: row?.qtdTransacoes ?? 0,
-        moeda: "BRL (centavos)",
-      },
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// 🔹 LISTA DE PAGAMENTOS
-router.get(
-  "/pagamentos",
-  requireToken,
-  async (_req: Request, res: Response) => {
-    try {
-      const payments = await db
-        .select()
-        .from(servicePaymentsTable)
-        .orderBy(desc(servicePaymentsTable.createdAt));
-
-      return res.json({
-        total: payments.length,
-        pagamentos: payments,
-      });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+    if (!userId || !valor || !pix) {
+      return res.status(400).json({ error: "Dados obrigatórios faltando" });
     }
-  },
-);
 
-// 🔹 SALDO
-router.get("/saldo", requireToken, async (_req: Request, res: Response) => {
-  try {
-    const [row] = await db
-      .select({
-        totalArrecadado: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
-        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.platformFee} ELSE 0 END), 0)::int`,
-        qtdTransacoes: sql<number>`COUNT(*)::int`,
+    const [novoSaque] = await db
+      .insert(payoutsTable)
+      .values({
+        userId,
+        amountToPay: valor,
+        pixKey: pix,
+        receiverName: nome || null,
+        receiverCpf: cpf || null,
+        status: "pending",
+        createdAt: new Date(),
       })
-      .from(payoutsTable);
+      .returning();
 
     return res.json({
-      saldo: {
-        totalArrecadado: row?.totalArrecadado ?? 0,
-        totalPago: row?.totalPago ?? 0,
-        totalPendente: row?.totalPendente ?? 0,
-        qtdTransacoes: row?.qtdTransacoes ?? 0,
-        moeda: "BRL (centavos)",
-      },
+      mensagem: "Saque solicitado",
+      saque: novoSaque,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// 🔥 DASHBOARD COMPLETO (USADO PELO PAINEL)
-router.get("/dashboard", async (_req: Request, res: Response) => {
+// 🔹 LISTAR SAQUES (ADM)
+router.get("/saques", async (_req: Request, res: Response) => {
   try {
-    const [resumo] = await db
-      .select({
-        totalTransacoes: sql<number>`COUNT(*)::int`,
-        totalPendente: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'pending' THEN ${payoutsTable.amountToPay} ELSE 0 END), 0)::int`,
-        totalPago: sql<number>`COALESCE(SUM(CASE WHEN ${payoutsTable.status} = 'paid' THEN ${payoutsTable.amountToPay} ELSE 0 END), 0)::int`,
-        totalComissao: sql<number>`COALESCE(SUM(${payoutsTable.platformFee}), 0)::int`,
-      })
-      .from(payoutsTable);
+    const saques = await db.select().from(payoutsTable);
+    return res.json(saques);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
-    const lista = await db
-      .select()
-      .from(payoutsTable)
-      .orderBy(desc(payoutsTable.createdAt));
+// 🔹 APROVAR SAQUE
+router.post("/aprovar-saque/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const [saque] = await db
+      .update(payoutsTable)
+      .set({ status: "approved" })
+      .where(eq(payoutsTable.id, id))
+      .returning();
+
+    if (!saque) {
+      return res.status(404).json({ error: "Saque não encontrado" });
+    }
 
     return res.json({
-      resumo: {
-        totalTransacoes: resumo?.totalTransacoes ?? 0,
-        totalPendente: resumo?.totalPendente ?? 0,
-        totalPago: resumo?.totalPago ?? 0,
-        totalComissao: resumo?.totalComissao ?? 0,
-      },
-      lista,
+      mensagem: "Saque aprovado",
+      saque,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// 🔹 RECUSAR SAQUE
+router.post("/recusar-saque/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const [saque] = await db
+      .update(payoutsTable)
+      .set({ status: "rejected" })
+      .where(eq(payoutsTable.id, id))
+      .returning();
+
+    if (!saque) {
+      return res.status(404).json({ error: "Saque não encontrado" });
+    }
+
+    return res.json({
+      mensagem: "Saque recusado",
+      saque,
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
