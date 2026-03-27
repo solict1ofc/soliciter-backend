@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authHeaders } from "./use-auth";
+import { API_BASE } from "@/lib/api";
 
 export interface Payout {
   id: number;
@@ -31,7 +32,7 @@ export function usePayouts(status?: "pending" | "paid" | "all") {
   return useQuery({
     queryKey: ["/api/admin/payouts", status],
     queryFn: async () => {
-      let url = "/api/admin/payouts";
+      let url = `${API_BASE}/api/admin/payouts`;
       if (status && status !== "all") {
         url += `?status=${status}`;
       }
@@ -52,7 +53,7 @@ export function usePayoutsSummary() {
   return useQuery({
     queryKey: ["/api/admin/payouts/summary"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/payouts/summary", { headers: authHeaders() });
+      const res = await fetch(`${API_BASE}/api/admin/payouts/summary`, { headers: authHeaders() });
       if (res.status === 401) throw new Error("Unauthorized");
       if (!res.ok) throw new Error("Failed to fetch summary");
       
@@ -69,7 +70,7 @@ export function useMarkPayoutPaid() {
   
   return useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(`/api/admin/payouts/${id}/paid`, {
+      const res = await fetch(`${API_BASE}/api/admin/payouts/${id}/paid`, {
         method: "PUT",
         headers: authHeaders(),
       });
