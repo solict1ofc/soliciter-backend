@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -30,6 +30,9 @@ const C = {
   textSecondary: "#A0A0B8",
   textMuted: "#555570",
   danger: "#FF3B5C",
+  dangerBg: "rgba(255,59,92,0.10)",
+  success: "#00C896",
+  successBg: "rgba(0,200,150,0.10)",
   accent: "#6C63FF",
 };
 
@@ -37,11 +40,13 @@ function formatCPF(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);
   if (digits.length <= 3) return digits;
   if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  if (digits.length <= 9)
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
   return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
 }
 
 type FieldId = "name" | "cpf" | "email" | "pass" | "confirm";
+type FeedbackType = "success" | "error" | null;
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
@@ -58,27 +63,73 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState<FieldId | null>(null);
 
+  // Inline feedback banner
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>(null);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showFeedback = (type: "success" | "error", msg: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setFeedbackType(type);
+    setFeedbackMsg(msg);
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+    // Auto-hide errors after 5 s; success dismisses via redirect
+    if (type === "error") {
+      timerRef.current = setTimeout(() => hideFeedback(), 5000);
+    }
+  };
+
+  const hideFeedback = () => {
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => setFeedbackType(null));
+  };
+
   const handleRegister = async () => {
+    // ── Client-side validation ──────────────────────────────────────────────
     if (!name.trim() || !cpf || !email.trim() || !password || !confirm) {
-      Alert.alert("Campos obrigatórios", "Preencha todos os campos.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showFeedback("error", "Preencha todos os campos antes de continuar.");
       return;
     }
     if (password !== confirm) {
-      Alert.alert("Senhas diferentes", "A confirmação de senha não confere.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showFeedback("error", "As senhas não conferem. Verifique e tente novamente.");
       return;
     }
     if (password.length < 6) {
-      Alert.alert("Senha fraca", "A senha deve ter ao menos 6 caracteres.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showFeedback("error", "A senha deve ter pelo menos 6 caracteres.");
       return;
     }
 
+    // ── API call ────────────────────────────────────────────────────────────
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
+    hideFeedback();
+
     try {
       await register(name.trim(), cpf.replace(/\D/g, ""), email.trim(), password);
-      // _layout redirects automatically after login state changes
+
+      // Show success banner — AuthGuard will redirect to /(tabs) automatically
+      // once user state is set inside register(). We show the message first so
+      // the user sees it for ~1.5 s during the navigation transition.
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showFeedback("success", "Cadastro realizado com sucesso! Entrando no app…");
     } catch (err: any) {
-      Alert.alert("Erro ao cadastrar", err.message ?? "Tente novamente.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const msg =
+        err.message && err.message !== "Erro ao cadastrar. Tente novamente."
+          ? err.message
+          : "Não foi possível criar a conta. Verifique os dados e tente novamente.";
+      showFeedback("error", msg);
     } finally {
       setLoading(false);
     }
@@ -166,6 +217,36 @@ export default function RegisterScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Cadastro</Text>
 
+          {/* ── Feedback banner ── */}
+          {feedbackType && (
+            <Animated.View
+              style={[
+                styles.feedback,
+                feedbackType === "success" ? styles.feedbackSuccess : styles.feedbackError,
+                { opacity: fadeAnim },
+              ]}
+            >
+              <Ionicons
+                name={feedbackType === "success" ? "checkmark-circle" : "alert-circle"}
+                size={18}
+                color={feedbackType === "success" ? C.success : C.danger}
+              />
+              <Text
+                style={[
+                  styles.feedbackText,
+                  { color: feedbackType === "success" ? C.success : C.danger },
+                ]}
+              >
+                {feedbackMsg}
+              </Text>
+              {feedbackType === "error" && (
+                <Pressable onPress={hideFeedback} hitSlop={12}>
+                  <Ionicons name="close" size={16} color={C.danger} />
+                </Pressable>
+              )}
+            </Animated.View>
+          )}
+
           {field("name", "Nome completo", "person-outline", name, setName, {
             placeholder: "Seu nome completo",
             autoComplete: "name",
@@ -183,34 +264,20 @@ export default function RegisterScreen() {
             autoComplete: "email",
           })}
 
-          {field(
-            "pass",
-            "Senha",
-            "lock-closed-outline",
-            password,
-            setPassword,
-            {
-              placeholder: "Mínimo 6 caracteres",
-              secure: !showPass,
-              showToggle: true,
-              onToggle: () => setShowPass((v) => !v),
-              autoComplete: "new-password",
-            }
-          )}
+          {field("pass", "Senha", "lock-closed-outline", password, setPassword, {
+            placeholder: "Mínimo 6 caracteres",
+            secure: !showPass,
+            showToggle: true,
+            onToggle: () => setShowPass((v) => !v),
+            autoComplete: "new-password",
+          })}
 
-          {field(
-            "confirm",
-            "Confirmar senha",
-            "lock-closed-outline",
-            confirm,
-            setConfirm,
-            {
-              placeholder: "Repita sua senha",
-              secure: !showConfirm,
-              showToggle: true,
-              onToggle: () => setShowConfirm((v) => !v),
-            }
-          )}
+          {field("confirm", "Confirmar senha", "lock-closed-outline", confirm, setConfirm, {
+            placeholder: "Repita sua senha",
+            secure: !showConfirm,
+            showToggle: true,
+            onToggle: () => setShowConfirm((v) => !v),
+          })}
 
           {/* Nota de segurança */}
           <View style={styles.securityNote}>
@@ -222,7 +289,11 @@ export default function RegisterScreen() {
 
           {/* Botão cadastrar */}
           <Pressable
-            style={({ pressed }) => [styles.btn, pressed && { opacity: 0.82, shadowOpacity: 0.3 }]}
+            style={({ pressed }) => [
+              styles.btn,
+              pressed && { opacity: 0.82, shadowOpacity: 0.3 },
+              loading && { opacity: 0.7 },
+            ]}
             onPress={handleRegister}
             disabled={loading}
           >
@@ -297,6 +368,31 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
 
+  // ── Feedback banner ────────────────────────────────────────────────────────
+  feedback: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+  },
+  feedbackSuccess: {
+    backgroundColor: C.successBg,
+    borderColor: "rgba(0,200,150,0.35)",
+  },
+  feedbackError: {
+    backgroundColor: C.dangerBg,
+    borderColor: "rgba(255,59,92,0.35)",
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+  },
+
+  // ── Fields ─────────────────────────────────────────────────────────────────
   fieldGroup: { gap: 6 },
   label: {
     fontSize: 11,

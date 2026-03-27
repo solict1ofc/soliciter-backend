@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Animated,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -30,6 +30,8 @@ const C = {
   text: "#FFFFFF",
   textSecondary: "#A0A0B8",
   textMuted: "#555570",
+  danger: "#FF3B5C",
+  dangerBg: "rgba(255,59,92,0.10)",
 };
 
 export default function LoginScreen() {
@@ -43,17 +45,39 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState<"email" | "pass" | null>(null);
 
+  // Inline error banner
+  const [errorMsg, setErrorMsg] = useState("");
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showError = (msg: string) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setErrorMsg(msg);
+    Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    timerRef.current = setTimeout(hideError, 6000);
+  };
+
+  const hideError = () => {
+    Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() =>
+      setErrorMsg("")
+    );
+  };
+
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert("Campos obrigatórios", "Informe e-mail e senha.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      showError("Informe seu e-mail e senha para continuar.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
+    hideError();
     try {
       await login(email.trim(), password);
+      // AuthGuard in _layout.tsx redirects to /(tabs) automatically on success
     } catch (err: any) {
-      Alert.alert("Erro ao entrar", err.message ?? "Verifique seus dados e tente novamente.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showError(err.message ?? "E-mail ou senha incorretos. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -96,11 +120,26 @@ export default function LoginScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Entrar na conta</Text>
 
+          {/* ── Error banner ── */}
+          {errorMsg !== "" && (
+            <Animated.View style={[styles.errorBanner, { opacity: fadeAnim }]}>
+              <Ionicons name="alert-circle" size={18} color={C.danger} />
+              <Text style={styles.errorText}>{errorMsg}</Text>
+              <Pressable onPress={hideError} hitSlop={12}>
+                <Ionicons name="close" size={16} color={C.danger} />
+              </Pressable>
+            </Animated.View>
+          )}
+
           {/* E-mail */}
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, focused === "email" && { color: C.primary }]}>E-mail</Text>
             <View style={[styles.inputRow, focused === "email" && styles.inputRowFocused]}>
-              <Ionicons name="mail-outline" size={18} color={focused === "email" ? C.primary : C.textMuted} />
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color={focused === "email" ? C.primary : C.textMuted}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="seu@email.com"
@@ -120,7 +159,11 @@ export default function LoginScreen() {
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, focused === "pass" && { color: C.primary }]}>Senha</Text>
             <View style={[styles.inputRow, focused === "pass" && styles.inputRowFocused]}>
-              <Ionicons name="lock-closed-outline" size={18} color={focused === "pass" ? C.primary : C.textMuted} />
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={focused === "pass" ? C.primary : C.textMuted}
+              />
               <TextInput
                 style={[styles.input, { flex: 1 }]}
                 placeholder="Sua senha"
@@ -146,11 +189,14 @@ export default function LoginScreen() {
 
           {/* ── Botão Entrar ── */}
           <Pressable
-            style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
+            style={({ pressed }) => [
+              styles.btn,
+              pressed && styles.btnPressed,
+              loading && { opacity: 0.7 },
+            ]}
             onPress={handleLogin}
             disabled={loading}
           >
-            {/* Glow layer */}
             <View style={styles.btnGlow} />
             {loading ? (
               <ActivityIndicator color="#000" size="small" />
@@ -193,7 +239,6 @@ const styles = StyleSheet.create({
     gap: 20,
   },
 
-  // ── Logo ──────────────────────────────────────────────────────────────────
   logoArea: {
     alignItems: "center",
     gap: 12,
@@ -237,19 +282,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,212,255,0.5)",
   },
   logoImage: { width: 104, height: 104 },
-  brand: {
-    fontSize: 30,
-    fontWeight: "800",
-    color: C.text,
-    letterSpacing: 6,
-  },
-  tagline: {
-    fontSize: 13,
-    color: C.textSecondary,
-    letterSpacing: 0.6,
-  },
+  brand: { fontSize: 30, fontWeight: "800", color: C.text, letterSpacing: 6 },
+  tagline: { fontSize: 13, color: C.textSecondary, letterSpacing: 0.6 },
 
-  // ── Card ──────────────────────────────────────────────────────────────────
   card: {
     width: "100%",
     backgroundColor: C.card,
@@ -264,11 +299,25 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 12 },
     elevation: 10,
   },
-  cardTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
-    color: C.text,
-    marginBottom: 2,
+  cardTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: C.text, marginBottom: 2 },
+
+  // ── Error banner ──────────────────────────────────────────────────────────
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: C.dangerBg,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255,59,92,0.35)",
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: C.danger,
+    lineHeight: 19,
   },
 
   // ── Fields ────────────────────────────────────────────────────────────────
@@ -291,18 +340,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 10,
   },
-  inputRowFocused: {
-    borderColor: C.primary,
-    backgroundColor: C.primaryGlow,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-    color: C.text,
-  },
+  inputRowFocused: { borderColor: C.primary, backgroundColor: C.primaryGlow },
+  input: { flex: 1, fontSize: 15, fontFamily: "Inter_400Regular", color: C.text },
 
-  // ── Botão principal ───────────────────────────────────────────────────────
+  // ── Button ────────────────────────────────────────────────────────────────
   btn: {
     overflow: "hidden",
     position: "relative",
@@ -314,7 +355,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
     marginTop: 6,
-    // Sombra/glow cyan
     shadowColor: C.primary,
     shadowOpacity: 0.55,
     shadowRadius: 20,
@@ -323,12 +363,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0,212,255,0.55)",
   },
-  btnPressed: {
-    opacity: 0.82,
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
-  },
+  btnPressed: { opacity: 0.82, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
   btnGlow: {
     position: "absolute",
     top: 0,
@@ -339,14 +374,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
-  btnText: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: "#000",
-    letterSpacing: 0.3,
-  },
+  btnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#000", letterSpacing: 0.3 },
 
-  // ── Nota de segurança ─────────────────────────────────────────────────────
   securityNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -365,20 +394,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  // ── Switch row ────────────────────────────────────────────────────────────
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  switchLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: C.textSecondary,
-  },
-  switchLink: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: C.primary,
-  },
+  switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  switchLabel: { fontSize: 14, fontFamily: "Inter_400Regular", color: C.textSecondary },
+  switchLink: { fontSize: 14, fontFamily: "Inter_700Bold", color: C.primary },
 });
