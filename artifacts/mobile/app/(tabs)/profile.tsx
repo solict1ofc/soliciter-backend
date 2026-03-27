@@ -28,7 +28,7 @@ import { useAuth } from "@/context/AuthContext";
 const C = Colors.dark;
 
 // ─── SAC ─────────────────────────────────────────────────────────────────────
-const WHATSAPP_NUMBER = "5562999999999"; // Substitua pelo número real
+const WHATSAPP_NUMBER = "556298179506";
 
 const FAQ_ITEMS = [
   {
@@ -385,7 +385,7 @@ export default function ProfileScreen() {
 
   // ─── SAC: abrir WhatsApp ─────────────────────────────────────────────────
   const openWhatsApp = () => {
-    const msg = encodeURIComponent("Olá, preciso de ajuda com o aplicativo SOLICITE.");
+    const msg = encodeURIComponent("Olá, vim pelo app");
     Linking.openURL(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`).catch(() => {
       Alert.alert("WhatsApp não encontrado", "Instale o WhatsApp e tente novamente.");
     });
