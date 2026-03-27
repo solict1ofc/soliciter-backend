@@ -80,7 +80,10 @@ router.post("/auth/register", async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, cpf: user.cpf, isPremium: user.isPremium },
     });
   } catch (error: any) {
-    console.error("[auth/register]", error.message);
+    console.error("[auth/register] code=%s msg=%s", error.code ?? "?", error.message);
+    if (!process.env.DATABASE_URL) {
+      return res.status(503).json({ error: "Banco de dados não configurado no servidor." });
+    }
     res.status(500).json({ error: "Erro interno. Tente novamente." });
   }
 });
@@ -118,7 +121,10 @@ router.post("/auth/login", async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, cpf: user.cpf, isPremium: user.isPremium },
     });
   } catch (error: any) {
-    console.error("[auth/login]", error.message);
+    console.error("[auth/login] code=%s msg=%s", error.code ?? "?", error.message);
+    if (!process.env.DATABASE_URL) {
+      return res.status(503).json({ error: "Banco de dados não configurado no servidor." });
+    }
     res.status(500).json({ error: "Erro interno. Tente novamente." });
   }
 });
