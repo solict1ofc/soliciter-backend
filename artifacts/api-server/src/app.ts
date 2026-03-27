@@ -136,11 +136,14 @@ app.use("/api", router);
 app.use("/admin", adminPanelRouter);
 
 // ── Static file serving (production / Render) ─────────────────────────────────
-// process.cwd() = project root on Render (where server.js lives)
-// __dirname = artifacts/api-server/src/ (tsx source location)
+// __dirname = artifacts/api-server/src/ in both Replit and Render (tsx resolves
+// import.meta.url to the actual source file path, regardless of cwd).
+// So "../../admin/dist/public" reliably resolves to artifacts/admin/dist/public.
 
-const adminDist = process.env.ADMIN_DIST_PATH
-  ?? path.join(process.cwd(), "artifacts/admin/dist/public");
+const _byDirname = path.resolve(__dirname, "../../admin/dist/public");
+const _byCwd     = path.join(process.cwd(), "artifacts/admin/dist/public");
+const adminDist  = process.env.ADMIN_DIST_PATH
+  ?? (existsSync(_byDirname) ? _byDirname : _byCwd);
 
 const mobileDist = path.resolve(__dirname, "../../mobile/static-build");
 const mobileLandingTmpl = path.resolve(
@@ -148,12 +151,15 @@ const mobileLandingTmpl = path.resolve(
   "../../mobile/server/templates/landing-page.html"
 );
 
-// Admin SPA at /admin — always registered, logs resolved path on startup
-logger.info({ adminDist, exists: existsSync(adminDist) }, "Admin dist path");
+logger.info(
+  { adminDist, exists: existsSync(adminDist), __dirname, cwd: process.cwd() },
+  "Admin dist path resolved"
+);
 
+// Admin SPA — always registered (no existsSync guard to silently skip)
 app.use("/admin", express.static(adminDist, { index: false }));
 
-// Serve index.html for /admin and all /admin/* paths (SPA routing)
+// Serve index.html for /admin and all /admin/* paths (SPA fallback)
 app.get(/^\/admin(\/.*)?$/, (_req, res) => {
   res.sendFile(path.join(adminDist, "index.html"));
 });
