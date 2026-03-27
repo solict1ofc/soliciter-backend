@@ -3,7 +3,6 @@ import { sql, desc } from "drizzle-orm";
 import {
   Router,
   type Request,
-
   type Response,
   type NextFunction,
 } from "express";
@@ -45,43 +44,8 @@ router.get("/teste", async (_req: Request, res: Response) => {
   }
 });
 
-// router.use(requireToken); // TEMPORARIAMENTE DESATIVADO
-
-// GET /admin — liberado temporariamente para teste
-router.get("/", (_req: Request, res: Response) => {
-  res.send("Admin liberado 🚀");
-});
-
-// GET /admin — página HTML (original, comentada)
-router.get("/_original", (_req: Request, res: Response) => {
-  res.send(`<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Painel Admin — SOLICITE</title>
-  <style>
-    body { font-family: sans-serif; background: #0A0A0F; color: #e0e0e0; padding: 2rem; }
-    h1   { color: #00D4FF; }
-    .status { display: inline-block; background: #1a1a2e; border: 1px solid #00D4FF;
-              color: #00D4FF; padding: 0.4rem 1rem; border-radius: 6px; margin: 1rem 0; }
-    a    { display: block; margin: 0.75rem 0; color: #00D4FF; font-size: 1.1rem; }
-    a:hover { color: #ffffff; }
-    p    { color: #888; font-size: 0.85rem; margin-top: 2rem; }
-  </style>
-</head>
-<body>
-  <h1>Painel Admin</h1>
-  <div class="status">API online</div>
-  <br/>
-  <a href="/admin/pagamentos">→ /admin/pagamentos — Lista de pagamentos</a>
-  <a href="/admin/saldo">→ /admin/saldo — Saldo da plataforma</a>
-  <p>Autenticação: header <code>x-admin: 123456</code> obrigatório em todas as rotas.</p>
-</body>
-</html>`);
-});
-
-// GET /admin/pagamentos — lista todos os pagamentos
-router.get("/pagamentos", async (_req: Request, res: Response) => {
+// GET /admin/pagamentos — lista todos os pagamentos (requer x-admin)
+router.get("/pagamentos", requireToken, async (_req: Request, res: Response) => {
   try {
     const payments = await db
       .select()
@@ -93,8 +57,8 @@ router.get("/pagamentos", async (_req: Request, res: Response) => {
   }
 });
 
-// GET /admin/saldo — saldo total acumulado da plataforma
-router.get("/saldo", async (_req: Request, res: Response) => {
+// GET /admin/saldo — saldo total acumulado da plataforma (requer x-admin)
+router.get("/saldo", requireToken, async (_req: Request, res: Response) => {
   try {
     const [row] = await db
       .select({
