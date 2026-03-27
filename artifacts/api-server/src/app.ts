@@ -34,6 +34,35 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", ts: new Date().toISOString() });
 });
 
+// ── DB health check — diagnoses database connectivity ────────────────────────
+app.get("/api/db-health", async (_req, res) => {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    return res.status(503).json({
+      status: "error",
+      error: "DATABASE_URL não configurada",
+      hint: "Configure DATABASE_URL no painel do Render → Environment",
+    });
+  }
+  const masked = dbUrl.replace(/:([^@]+)@/, ":***@");
+  try {
+    const result = await pool.query("SELECT NOW() AS ts, current_database() AS db");
+    res.json({
+      status: "ok",
+      db: result.rows[0].db,
+      ts: result.rows[0].ts,
+      url: masked,
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      status: "error",
+      error: err.message,
+      url: masked,
+      hint: "Verifique se DATABASE_URL está correta e o banco está acessível",
+    });
+  }
+});
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 app.get("/", (_req, res) => {
   res.send("API funcionando 🚀");
