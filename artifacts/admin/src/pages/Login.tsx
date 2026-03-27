@@ -25,23 +25,30 @@ export function Login() {
     setError("");
 
     try {
-      // Test the token
-      const res = await fetch("/api/admin/payouts", {
-        headers: { Authorization: `Bearer ${tokenInput}` }
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tokenInput }),
       });
-      
+
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-json response */ }
+
+      if (res.status === 503) {
+        throw new Error(data.error ?? "Servidor não configurado. Contate o administrador do sistema.");
+      }
       if (res.status === 401) {
-        throw new Error("Token inválido.");
+        throw new Error(data.error ?? "Token inválido.");
       }
       if (!res.ok) {
-        throw new Error("Erro de conexão com o servidor.");
+        throw new Error(data.error ?? `Erro ${res.status}: Falha na conexão com o servidor.`);
       }
-      
-      // Success
+
       login(tokenInput);
       setLocation("/");
     } catch (err: any) {
-      setError(err.message || "Falha na autenticação");
+      setError(err.message || "Falha na autenticação. Verifique a conexão e o token.");
+      console.error("[Admin Login] erro:", err.message);
     } finally {
       setIsLoading(false);
     }

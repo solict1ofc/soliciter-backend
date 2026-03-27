@@ -19,7 +19,17 @@ const app: Express = express();
 // Trust the first proxy (required on Replit, Render, and most cloud platforms)
 app.set("trust proxy", 1);
 
-// ── Health check — must be FIRST so Render marks the service as healthy ────────
+// ── CORS — must be FIRST so preflight OPTIONS requests are answered before any route ──
+const corsOptions = {
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-admin"],
+  credentials: false,
+};
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions)); // explicit preflight handler (Express 5 requires regex, not "*")
+
+// ── Health check — must be early so Render marks the service as healthy ────────
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", ts: new Date().toISOString() });
 });
@@ -122,7 +132,6 @@ app.use(
     },
   }),
 );
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

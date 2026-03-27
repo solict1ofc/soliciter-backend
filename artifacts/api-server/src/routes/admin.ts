@@ -19,15 +19,44 @@ const router = Router();
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminSecret = process.env.ADMIN_SECRET;
   if (!adminSecret) {
-    return res.status(503).json({ error: "ADMIN_SECRET não configurado no servidor." });
+    logger.error("[admin] ADMIN_SECRET não está configurado no servidor. Configure a variável de ambiente no Render.");
+    return res.status(503).json({ error: "ADMIN_SECRET não configurado no servidor. Configure no painel do Render." });
   }
   const auth = req.headers["authorization"] ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token || token !== adminSecret) {
-    return res.status(401).json({ error: "Acesso negado. Token admin inválido." });
+  if (!token) {
+    logger.warn("[admin] Requisição sem token de autorização");
+    return res.status(401).json({ error: "Token de autorização ausente." });
+  }
+  if (token !== adminSecret) {
+    logger.warn("[admin] Token inválido recebido");
+    return res.status(401).json({ error: "Token admin inválido." });
   }
   next();
 }
+
+// ── POST /admin/login — valida o token e retorna sucesso ──────────────────────
+router.post("/admin/login", (req: Request, res: Response) => {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    logger.error("[admin/login] ADMIN_SECRET não configurado no servidor");
+    return res.status(503).json({
+      ok: false,
+      error: "Servidor não configurado. Adicione ADMIN_SECRET nas variáveis de ambiente do Render.",
+    });
+  }
+  const body = req.body as { token?: string } | undefined;
+  const token = (body?.token ?? "").trim();
+  if (!token) {
+    return res.status(400).json({ ok: false, error: "Token não informado." });
+  }
+  if (token !== adminSecret) {
+    logger.warn("[admin/login] Token inválido");
+    return res.status(401).json({ ok: false, error: "Token inválido. Verifique o ADMIN_SECRET." });
+  }
+  logger.info("[admin/login] Login bem-sucedido");
+  return res.json({ ok: true });
+});
 
 router.use("/admin", requireAdmin);
 
