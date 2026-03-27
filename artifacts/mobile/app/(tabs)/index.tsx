@@ -5,7 +5,6 @@ import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -401,6 +400,9 @@ export default function SolicitacoesScreen() {
     text: string;
   } | null>(null);
 
+  // Inline error for create-service step
+  const [createError, setCreateError] = useState<string | null>(null);
+
   // Rating/confirm modal
   const [ratingService, setRatingService] = useState<Service | null>(null);
   const [confirming, setConfirming]       = useState(false);
@@ -475,16 +477,20 @@ export default function SolicitacoesScreen() {
 
   // ─── Create service → payment ──────────────────────────────────────────────
   const handleCreate = async () => {
+    setCreateError(null);
     if (!title.trim() || !description.trim() || !value.trim()) {
-      Alert.alert("Campos obrigatórios", "Preencha título, descrição e valor.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setCreateError("Preencha título, descrição e valor antes de continuar.");
       return;
     }
     if (!city.trim() || !neighborhood.trim()) {
-      Alert.alert("Localização obrigatória", "Selecione a cidade e o bairro antes de continuar.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setCreateError("Selecione a cidade e o bairro antes de continuar.");
       return;
     }
     if (numericValue < 5) {
-      Alert.alert("Valor mínimo", "O valor mínimo para uma solicitação é R$ 5,00.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setCreateError("O valor mínimo para uma solicitação é R$ 5,00.");
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -499,10 +505,21 @@ export default function SolicitacoesScreen() {
       setPixData(pix);
       setPendingServiceId(newService.id);
       setPixExpiresAt(Date.now() + 10 * 60 * 1000); // 10 minutes
+      setCreateError(null);
       setPaymentInlineMsg(null);
       setFormStep("payment");
     } catch (err: any) {
-      Alert.alert("Erro ao criar pagamento", err?.message ?? "Tente novamente.");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const raw: string = err?.message ?? "Erro ao gerar PIX. Tente novamente.";
+      // Translate backend configuration errors into user-friendly messages
+      const isConfigErr = raw.toLowerCase().includes("não configurado") ||
+        raw.toLowerCase().includes("mercado pago") ||
+        raw.toLowerCase().includes("access token");
+      setCreateError(
+        isConfigErr
+          ? "O sistema de pagamento está em manutenção. Tente novamente em alguns instantes ou entre em contato com o suporte."
+          : raw
+      );
     } finally {
       setCreating(false);
     }
@@ -724,6 +741,17 @@ export default function SolicitacoesScreen() {
                       <Text style={styles.orderTotalLabel}>Total estimado</Text>
                       <Text style={styles.orderTotalValue}>R$ {finalValue.toFixed(2)}</Text>
                     </View>
+                  </View>
+                )}
+
+                {/* ── Inline create error ── */}
+                {createError && (
+                  <View style={styles.createErrorBanner}>
+                    <Ionicons name="alert-circle-outline" size={16} color={C.danger} />
+                    <Text style={styles.createErrorText}>{createError}</Text>
+                    <Pressable onPress={() => setCreateError(null)} hitSlop={12}>
+                      <Ionicons name="close" size={15} color={C.danger} />
+                    </Pressable>
                   </View>
                 )}
 
@@ -1229,6 +1257,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(255,184,0,0.3)",
   },
   escrowText: { fontSize: 12, fontFamily: "Inter_500Medium", color: C.warning, flex: 1 },
+
+  createErrorBanner: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "rgba(255,59,92,0.10)",
+    borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: "rgba(255,59,92,0.30)",
+  },
+  createErrorText: {
+    flex: 1, fontSize: 13, fontFamily: "Inter_400Regular",
+    color: "#FF3B5C", lineHeight: 19,
+  },
 
   successCard: {
     marginHorizontal: 16, backgroundColor: C.surface,
