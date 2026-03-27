@@ -37,20 +37,29 @@ router.post("/sacar", async (req: Request, res: Response) => {
       bankType,
     } = req.body ?? {};
 
+    logger.info(
+      { userId, amount, method, pixKey: pixKey ? "[presente]" : "[ausente]" },
+      "[sacar] Requisição recebida"
+    );
+
     // ── Validações ─────────────────────────────────────────────────────────
     if (!userId || typeof userId !== "string") {
+      logger.warn({ body: req.body }, "[sacar] userId ausente ou inválido");
       return res.status(400).json({ error: "userId é obrigatório." });
     }
 
     const amountNum = Number(amount);
     if (isNaN(amountNum) || amountNum < 10) {
+      logger.warn({ userId, amount }, "[sacar] Valor inválido ou abaixo do mínimo");
       return res.status(400).json({ error: "Valor mínimo para saque é R$ 10,00." });
     }
     if (amountNum > 50000) {
+      logger.warn({ userId, amount }, "[sacar] Valor acima do máximo permitido");
       return res.status(400).json({ error: "Valor máximo por saque é R$ 50.000,00." });
     }
 
     if (method === "pix" && !pixKey?.trim()) {
+      logger.warn({ userId }, "[sacar] Chave PIX ausente");
       return res.status(400).json({ error: "Chave PIX é obrigatória para saque via PIX." });
     }
     if (method === "bank") {
