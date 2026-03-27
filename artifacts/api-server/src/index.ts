@@ -1,4 +1,5 @@
 import app from "./app";
+import { initDb } from "@workspace/db";
 import { logger } from "./lib/logger";
 
 // Render sets PORT automatically; fallback to 10000 for safety
@@ -9,6 +10,9 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const safePort = Number.isNaN(port) || port <= 0 ? 10000 : port;
+
+// Run auto-migration before accepting connections (creates tables if missing)
+initDb().catch((err) => logger.warn({ err }, "initDb warning"));
 
 // Explicitly bind to 0.0.0.0 so Render's health checks can reach us
 app.listen(safePort, "0.0.0.0", (err) => {

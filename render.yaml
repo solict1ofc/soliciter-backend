@@ -1,3 +1,9 @@
+databases:
+  - name: solicite-db
+    databaseName: solicitedb
+    plan: starter
+    region: oregon
+
 services:
   - type: web
     name: solicite
@@ -10,7 +16,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: solicite-db
+          property: connectionString
       - key: MERCADO_PAGO_ACCESS_TOKEN
         sync: false
       - key: SESSION_SECRET
