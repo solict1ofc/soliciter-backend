@@ -45,10 +45,15 @@ router.get("/teste", async (_req: Request, res: Response) => {
   }
 });
 
-router.use(requireToken);
+// router.use(requireToken); // TEMPORARIAMENTE DESATIVADO
 
-// GET /admin — página HTML
+// GET /admin — liberado temporariamente para teste
 router.get("/", (_req: Request, res: Response) => {
+  res.send("Admin liberado 🚀");
+});
+
+// GET /admin — página HTML (original, comentada)
+router.get("/_original", (_req: Request, res: Response) => {
   res.send(`<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
