@@ -158,7 +158,7 @@ type WithdrawMethod = "pix" | "bank";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { provider, activatePlan, pendingEarnings, withdrawEarnings, resetProviderBalance, savePhoto } = useApp();
+  const { provider, activatePlan, pendingEarnings, withdrawEarnings, savePhoto } = useApp();
   const { user, logout, refreshUser } = useAuth();
 
   const [pickingPhoto, setPickingPhoto] = useState(false);
@@ -836,27 +836,6 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* ── FERRAMENTAS DE TESTE (dev only) ── */}
-        {__DEV__ && (
-          <View style={styles.devSection}>
-            <View style={styles.devHeader}>
-              <Ionicons name="construct-outline" size={14} color={C.warning} />
-              <Text style={styles.devHeaderText}>Ferramentas de Teste</Text>
-            </View>
-            <Pressable
-              style={({ pressed }) => [styles.devResetBtn, pressed && { opacity: 0.75 }]}
-              onPress={async () => {
-                await resetProviderBalance();
-              }}
-            >
-              <Ionicons name="refresh-circle-outline" size={18} color={C.danger} />
-              <Text style={styles.devResetText}>Zerar Saldo (Reset de Teste)</Text>
-            </Pressable>
-            <Text style={styles.devNote}>
-              Saldo atual: R$ {provider.earnings.toFixed(2)} | Sacado: R$ {(provider.withdrawn ?? 0).toFixed(2)}
-            </Text>
-          </View>
-        )}
       </ScrollView>
 
       {/* ── MODAL DE SAQUE ── */}
@@ -2106,51 +2085,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: C.textSecondary,
   },
-  devSection: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 16,
-    backgroundColor: "rgba(255,184,0,0.05)",
-    borderWidth: 1,
-    borderColor: "rgba(255,184,0,0.18)",
-    borderRadius: 14,
-    padding: 14,
-    gap: 10,
-  },
-  devHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  devHeaderText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: C.warning,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  devResetBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(255,59,92,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,59,92,0.22)",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  devResetText: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-    color: C.danger,
-  },
-  devNote: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: C.textMuted,
-  },
-
   // ── Generic card / input ────────────────────────────────────────────────────
   card: {
     backgroundColor: C.surface,
