@@ -136,35 +136,33 @@ app.use("/api", router);
 app.use("/admin", adminPanelRouter);
 
 // ── Static file serving (production / Render) ─────────────────────────────────
-// Paths are relative to the compiled dist/ output directory:
-//   dist/index.mjs → artifacts/api-server/dist/
-//   ../../admin/dist/public  → artifacts/admin/dist/public
-//   ../../mobile/static-build → artifacts/mobile/static-build
+// __dirname = artifacts/api-server/src/ in both Replit and Render (tsx resolves
+// import.meta.url to the actual source file path, regardless of cwd).
+// So "../../admin/dist/public" reliably resolves to artifacts/admin/dist/public.
 
-// ADMIN_DIST_PATH env var → set by Render (server/ bundle puts admin-public in dist/)
-// Fallback 1: dist/admin-public/ sibling of this bundle (server/dist/)
-// Fallback 2: ../../admin/dist/public relative to this file (Replit dev build)
-const _adminBundled = path.resolve(__dirname, "admin-public");
-const _adminDev     = path.resolve(__dirname, "../../admin/dist/public");
-const adminDist     = process.env.ADMIN_DIST_PATH
-  ?? (existsSync(_adminBundled) ? _adminBundled : _adminDev);
+const _byDirname = path.resolve(__dirname, "../../admin/dist/public");
+const _byCwd     = path.join(process.cwd(), "artifacts/admin/dist/public");
+const adminDist  = process.env.ADMIN_DIST_PATH
+  ?? (existsSync(_byDirname) ? _byDirname : _byCwd);
+
 const mobileDist = path.resolve(__dirname, "../../mobile/static-build");
 const mobileLandingTmpl = path.resolve(
   __dirname,
   "../../mobile/server/templates/landing-page.html"
 );
 
-// Admin SPA at /admin/*
-if (existsSync(adminDist)) {
-  app.use("/admin", express.static(adminDist, { index: false }));
+logger.info(
+  { adminDist, exists: existsSync(adminDist), __dirname, cwd: process.cwd() },
+  "Admin dist path resolved"
+);
 
-  // All /admin/* paths fall back to index.html (SPA routing)
-  app.get(/^\/admin(\/.*)?$/, (req, res) => {
-    res.sendFile(path.join(adminDist, "index.html"));
-  });
+// Admin SPA — always registered (no existsSync guard to silently skip)
+app.use("/admin", express.static(adminDist, { index: false }));
 
-  logger.info({ adminDist }, "Serving admin panel at /admin");
-}
+// Serve index.html for /admin and all /admin/* paths (SPA fallback)
+app.get(/^\/admin(\/.*)?$/, (_req, res) => {
+  res.sendFile(path.join(adminDist, "index.html"));
+});
 
 // Mobile Expo Go manifests + landing page at /
 if (existsSync(mobileDist)) {
